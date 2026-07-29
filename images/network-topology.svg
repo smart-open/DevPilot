@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 620">
+  <defs>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="6" flood-opacity="0.12"/>
+    </filter>
+    <filter id="glowSm" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1" stdDeviation="3" flood-opacity="0.1"/>
+    </filter>
+    <linearGradient id="dockerBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#16161a"/>
+      <stop offset="100%" stop-color="#1e1e26"/>
+    </linearGradient>
+    <linearGradient id="netBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(245,158,11,0.04)"/>
+      <stop offset="100%" stop-color="rgba(245,158,11,0.01)"/>
+    </linearGradient>
+    <pattern id="dots" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="10" cy="10" r="0.5" fill="#3f3f46" opacity="0.3"/>
+    </pattern>
+  </defs>
+
+  <rect width="960" height="620" fill="#0d0d0f"/>
+  <rect width="960" height="620" fill="url(#dots)"/>
+
+  <!-- Title -->
+  <text x="480" y="32" text-anchor="middle" font-family="'Outfit','Segoe UI',sans-serif" font-size="16" font-weight="700" fill="#e4e4e7">网络拓扑</text>
+
+  <!-- ===== Docker Host outer frame ===== -->
+  <rect x="40" y="55" width="880" height="420" rx="14" fill="url(#dockerBg)" stroke="#3f3f46" stroke-width="1" stroke-dasharray="6,4" filter="url(#glow)"/>
+  <text x="65" y="80" font-family="'JetBrains Mono',Consolas,monospace" font-size="10" font-weight="600" fill="#71717a" letter-spacing="0.15em">DOCKER HOST</text>
+
+  <!-- ===== devpilot-network frame ===== -->
+  <rect x="70" y="180" width="820" height="180" rx="10" fill="url(#netBg)" stroke="#f59e0b" stroke-width="1" stroke-dasharray="5,3" opacity="0.5"/>
+  <text x="480" y="205" text-anchor="middle" font-family="'JetBrains Mono',Consolas,monospace" font-size="10" font-weight="500" fill="#f59e0b" opacity="0.6" letter-spacing="0.1em">AI-NETWORK (DOCKER BRIDGE)</text>
+
+  <!-- ===== Redis node ===== -->
+  <g filter="url(#glowSm)">
+    <rect x="110" y="225" width="200" height="110" rx="10" fill="#1e1e26" stroke="#ef4444" stroke-width="1.5"/>
+    <rect x="110" y="225" width="200" height="32" rx="10" fill="#ef4444" opacity="0.12"/>
+    <rect x="110" y="249" width="200" height="8" fill="#ef4444" opacity="0.12"/>
+    <circle cx="130" cy="241" r="5" fill="#ef4444" opacity="0.8"/>
+    <text x="210" y="245" text-anchor="middle" font-family="'Outfit','Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#e4e4e7">Redis</text>
+    <text x="210" y="272" text-anchor="middle" font-family="'JetBrains Mono',Consolas,monospace" font-size="10" fill="#a1a1aa">redis:8.8.1-alpine</text>
+    <!-- Port badge -->
+    <rect x="170" y="285" width="80" height="20" rx="4" fill="#0d0d0f" stroke="#ef4444" stroke-width="0.8" opacity="0.6"/>
+    <text x="210" y="298" text-anchor="middle" font-family="'JetBrains Mono',Consolas,monospace" font-size="9" fill="#a1a1aa">:6379 内部</text>
+    <text x="210" y="322" text-anchor="middle" font-family="'Outfit','Segoe UI',sans-serif" font-size="9" fill="#71717a">AOF + RDB 持久化</text>
+  </g>
+
+  <!-- ===== OpenClaw node ===== -->
+  <g filter="url(#glowSm)">
+    <rect x="380" y="225" width="200" height="110" rx="10" fill="#1e1e26" stroke="#10b981" stroke-width="1.5"/>
+    <rect x="380" y="225" width="200" height="32" rx="10" fill="#10b981" opacity="0.12"/>
+    <rect x="380" y="249" width="200" height="8" fill="#10b981" opacity="0.12"/>
+    <circle cx="400" cy="241" r="5" fill="#10b981" opacity="0.8"/>
+    <text x="480" y="245" text-anchor="middle" font-family="'Outfit','Segoe UI',sans-serif" font-size="13" font-weight="700" fill="#e4e4e7">OpenClaw</text>
+    <text x="480" y="272" text-anchor="middle" font-family="'JetBrains Mono',Consolas,monospace" font-size="10" fill="#a1a1aa">openclaw@2026.7.1-2</text>
+    <!-- Port badge -->
+    <rect x="440" y="285" width="80" height="20" rx="4" fill="#0d0d0f" stroke="#10b981" stroke-width="0.8" opacity="0.6"/>
+    <text x="480" y="298" text-anchor="middle" font-family="'JetBrains Mono',Consolas,monospace" font-size="9" fill="#a1a1aa">:18789 对外</text>
+    <text x="480" y="322" text-anchor="middle" font-family="'Outfit','Segoe UI',sans-serif" font-size="9" fill="#71717a">Gateway + 飞书长连接</text>
+  </g>
+
+  <!-- ===== CC-Switch + Claude Code node ===== -->
+  <g filter="url(#glowSm)">
+    <rect x="650" y="225" width="200" height="110" rx="10" fill="#1e1e26" stroke="#60a5fa" stroke-width="1.5"/>
+    <rect x="650" y="225" width="200" height="32" rx="10" fill="#60a5fa" opacity="0.12"/>
+    <rect x="650" y="249" width="200" height="8" fill="#60a5fa" opacity="0.12"/>
+    <circle cx="670" cy="241" r="5" fill="#60a5fa" opacity="0.8"/>
+    <text x="750" y="245" text-anchor="middle" font-family="'Outfit','Segoe UI',sans-serif" font-size="12" font-weight="700" fill="#e4e4e7">CC-Switch + Claude</text>
+    <text x="750" y="272" text-anchor="middle" font-family="'JetBrains Mono',Consolas,monospace" font-size="10" fill="#a1a1aa">v0.21.0 / claude:2.1.220</text>
+    <!-- Port badge -->
+    <rect x="710" y="285" width="80" height="20" rx="4" fill="#0d0d0f" stroke="#60a5fa" stroke-width="0.8" opacity="0.6"/>
+    <text x="750" y="298" text-anchor="middle" font-family="'JetBrains Mono',Consolas,monospace" font-size="9" fill="#a1a1aa">:8890 对外</text>
+    <text x="750" y="322" text-anchor="middle" font-family="'Outfit','Segoe UI',sans-serif" font-size="9" fill="#71717a">Web UI + Claude Code CLI</text>
+  </g>
+
+  <!-- ===== Internal connection lines ===== -->
+  <!-- Redis ↔ OpenClaw -->
+  <line x1="310" y1="280" x2="380" y2="280" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.4"/>
+  <circle cx="345" cy="280" r="3" fill="#f59e0b" opacity="0.3"/>
+  <!-- OpenClaw ↔ CC-Switch -->
+  <line x1="580" y1="280" x2="650" y2="280" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.4"/>
+  <circle cx="615" cy="280" r="3" fill="#f59e0b" opacity="0.3"/>
+
+  <!-- ===== External services row ===== -->
+  <!-- 飞书服务器 -->
+  <g filter="url(#glowSm)">
+    <rect x="110" y="490" width="200" height="70" rx="10" fill="#16161a" stroke="#10b981" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/>
+    <circle cx="135" cy="515" r="6" fill="#10b981" opacity="0.2"/>
+    <circle cx="135" cy="515" r="3" fill="#10b981" opacity="0.6"/>
+    <text x="210" y="518" text-anchor="middle" font-family="'Outfit','Segoe UI',sans-serif" font-size="13" font-weight="600" fill="#10b981">飞书服务器</text>
+    <text x="210" y="538" text-anchor="middle" font-family="'Outfit','Segoe UI',sans-serif" font-size="10" fill="#71717a">Feishu Server</text>
+  </g>
+
+  <!-- agnes-ai API -->
+  <g filter="url(#glowSm)">
+    <rect x="380" y="490" width="200" height="70" rx="10" fill="#16161a" stroke="#a78bfa" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/>
+    <circle cx="405" cy="515" r="6" fill="#a78bfa" opacity="0.2"/>
+    <circle cx="405" cy="515" r="3" fill="#a78bfa" opacity="0.6"/>
+    <text x="480" y="518" text-anchor="middle" font-family="'Outfit','Segoe UI',sans-serif" font-size="13" font-weight="600" fill="#a78bfa">agnes-ai API</text>
+    <text x="480" y="538" text-anchor="middle" font-family="'JetBrains Mono',Consolas,monospace" font-size="10" fill="#71717a">apihub.agnes-ai.com</text>
+  </g>
+
+  <!-- 浏览器 -->
+  <g filter="url(#glowSm)">
+    <rect x="650" y="490" width="200" height="70" rx="10" fill="#16161a" stroke="#60a5fa" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/>
+    <circle cx="675" cy="515" r="6" fill="#60a5fa" opacity="0.2"/>
+    <circle cx="675" cy="515" r="3" fill="#60a5fa" opacity="0.6"/>
+    <text x="750" y="518" text-anchor="middle" font-family="'Outfit','Segoe UI',sans-serif" font-size="13" font-weight="600" fill="#60a5fa">浏览器</text>
+    <text x="750" y="538" text-anchor="middle" font-family="'Outfit','Segoe UI',sans-serif" font-size="10" fill="#71717a">Browser</text>
+  </g>
+
+  <!-- ===== Connection arrows (external → internal) ===== -->
+  <!-- 飞书 → OpenClaw (WebSocket) -->
+  <path d="M 210 490 Q 210 430 380 310" stroke="#10b981" stroke-width="1.8" fill="none" stroke-dasharray="6,3" opacity="0.6"/>
+  <polygon points="380,310 372,314 374,306" fill="#10b981" opacity="0.6"/>
+  <text x="250" y="420" font-family="'JetBrains Mono',Consolas,monospace" font-size="9" fill="#10b981" opacity="0.7">WebSocket 长连接</text>
+
+  <!-- agnes-ai → OpenClaw (HTTPS) -->
+  <path d="M 460 490 Q 460 410 480 340" stroke="#a78bfa" stroke-width="1.8" fill="none" stroke-dasharray="6,3" opacity="0.6"/>
+  <polygon points="480,340 474,332 486,332" fill="#a78bfa" opacity="0.6"/>
+  <text x="440" y="430" font-family="'JetBrains Mono',Consolas,monospace" font-size="9" fill="#a78bfa" opacity="0.7">HTTPS API</text>
+
+  <!-- agnes-ai → CC-Switch (HTTPS) -->
+  <path d="M 520 490 Q 650 430 720 340" stroke="#a78bfa" stroke-width="1.5" fill="none" stroke-dasharray="6,3" opacity="0.4"/>
+  <polygon points="720,340 714,332 726,334" fill="#a78bfa" opacity="0.4"/>
+  <text x="610" y="430" font-family="'JetBrains Mono',Consolas,monospace" font-size="9" fill="#a78bfa" opacity="0.5">HTTPS</text>
+
+  <!-- 浏览器 → CC-Switch (HTTP) -->
+  <path d="M 750 490 Q 750 420 750 340" stroke="#60a5fa" stroke-width="1.8" fill="none" stroke-dasharray="6,3" opacity="0.6"/>
+  <polygon points="750,340 744,348 756,348" fill="#60a5fa" opacity="0.6"/>
+  <text x="760" y="420" font-family="'JetBrains Mono',Consolas,monospace" font-size="9" fill="#60a5fa" opacity="0.7">HTTP :8890</text>
+
+  <!-- ===== Legend ===== -->
+  <rect x="40" y="570" width="880" height="38" rx="8" fill="#16161a" stroke="#27272a" stroke-width="1"/>
+  <circle cx="60" cy="589" r="4" fill="#10b981" opacity="0.8"/>
+  <text x="72" y="593" font-family="'Outfit','Segoe UI',sans-serif" font-size="10" fill="#a1a1aa">WebSocket</text>
+  <circle cx="170" cy="589" r="4" fill="#a78bfa" opacity="0.8"/>
+  <text x="182" y="593" font-family="'Outfit','Segoe UI',sans-serif" font-size="10" fill="#a1a1aa">HTTPS API</text>
+  <circle cx="280" cy="589" r="4" fill="#f59e0b" opacity="0.4"/>
+  <text x="292" y="593" font-family="'Outfit','Segoe UI',sans-serif" font-size="10" fill="#a1a1aa">内部网络</text>
+  <circle cx="380" cy="589" r="4" fill="#60a5fa" opacity="0.8"/>
+  <text x="392" y="593" font-family="'Outfit','Segoe UI',sans-serif" font-size="10" fill="#a1a1aa">HTTP 访问</text>
+  <text x="900" y="593" text-anchor="end" font-family="'Outfit','Segoe UI',sans-serif" font-size="9" fill="#71717a">实线框 = 容器  虚线框 = 外部服务</text>
+</svg>

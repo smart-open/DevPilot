@@ -1,0 +1,288 @@
+# ============================================================
+# DevPilot - Gitee Go 持续集成流水线
+# 功能：代码检查、构建 Docker 镜像、推送至 Gitee 容器镜像仓库、Trivy 安全扫描
+# 触发：推送到 master/main 分支
+#
+# 注意：此文件需放置在仓库根目录的 .workflow/ 下才能被 Gitee Go 识别
+# 或在 Gitee Go 流水线配置中指定路径
+# ============================================================
+version: '1.0'
+name: devpilot-ci
+displayName: DevPilot CI 流水线
+
+# ---- 触发条件 ----
+triggers:
+  push:
+    - branches:
+        include:
+          - master
+          - main
+  pull_request:
+    - branches:
+        include:
+          - master
+          - main
+
+# ---- 全局变量（构建参数，与 .env.example 保持一致） ----
+vars:
+  NODE_IMAGE_TAG: "22.23.1-bookworm"
+  OPENCLAW_VERSION: "2026.7.1-2"
+  CC_SWITCH_VERSION: "v0.21.0"
+  CLAUDE_CODE_VERSION: "2.1.220"
+  # Gitee 容器镜像仓库地址（需在 Gitee Go 变量中配置实际仓库）
+  # REGISTRY: registry.cn-beijing.aliyuncs.com  # 或使用 Gitee 镜像仓库
+  # NAMESPACE: your-namespace
+
+# ============================================================
+# 流水线阶段
+# ============================================================
+stages:
+  # ---- 阶段 1：代码检查 ----
+  - stage:
+      name: lint-stage
+      displayName: 代码检查
+      steps:
+        - step: shell@1
+          name: lint-scripts
+          displayName: 检查 Shell 脚本语法
+          inputs:
+            script: |
+              #!/bin/bash
+              echo "==> 检查所有 shell 脚本语法 ..."
+              FAIL=0
+              while IFS= read -r file; do
+                if bash -n "$file"; then
+                  echo "  [OK] $file"
+                else
+                  echo "  [FAIL] $file"
+                  FAIL=1
+                fi
+              done < <(find . -name '*.sh' -not -path './node_modules/*')
+              if [ "$FAIL" -eq 1 ]; then
+                echo "存在语法错误的 shell 脚本，请修复后重试"
+                exit 1
+              fi
+
+        - step: shell@1
+          name: check-dockerfiles
+          displayName: 检查 Dockerfile 完整性
+          inputs:
+            script: |
+              #!/bin/bash
+              echo "==> 检查 Dockerfile 是否存在 ..."
+              for df in dockerfiles/openclaw/Dockerfile dockerfiles/cc-switch-claude/Dockerfile; do
+                if [ -f "$df" ]; then
+                  echo "  [OK] $df"
+                else
+                  echo "  [FAIL] 缺少 $df"
+                  exit 1
+                fi
+              done
+
+        - step: shell@1
+          name: check-compose
+          displayName: 检查 docker-compose 语法
+          inputs:
+            script: |
+              #!/bin/bash
+              echo "==> 检查 docker-compose.yml 语法 ..."
+              if [ -f docker-compose.yml ]; then
+                docker compose -f docker-compose.yml config -q && echo "  [OK] docker-compose.yml 语法正确"
+              else
+                echo "  [FAIL] 缺少 docker-compose.yml"
+                exit 1
+              fi
+
+        - step: shell@1
+          name: check-env
+          displayName: 检查环境变量模板完整性
+          inputs:
+            script: |
+              #!/bin/bash
+              echo "==> 检查 .env.example 变量完整性 ..."
+              REQUIRED_VARS="AGNES_API_KEY AGNES_BASE_URL FEISHU_APP_ID FEISHU_APP_SECRET REDIS_PASSWORD OPENCLAW_GATEWAY_TOKEN OPENCLAW_GATEWAY_PORT CC_SWITCH_WEB_PORT NODE_IMAGE_TAG OPENCLAW_VERSION CC_SWITCH_VERSION CLAUDE_CODE_VERSION TZ"
+              for var in $REQUIRED_VARS; do
+                if grep -q "^${var}=" .env.example; then
+                  echo "  [OK] ${var}"
+                else
+                  echo "  [FAIL] .env.example 缺少变量: ${var}"
+                  exit 1
+                fi
+              done
+
+  # ---- 阶段 2：构建 Docker 镜像 ----
+  - stage:
+      name: build-stage
+      displayName: 构建 Docker 镜像
+      dependsOn: lint-stage
+      steps:
+        # 构建 OpenClaw 镜像
+        - step: shell@1
+          name: build-openclaw
+          displayName: 构建 OpenClaw 镜像
+          inputs:
+            script: |
+              #!/bin/bash
+              set -e
+              echo "==> 构建 OpenClaw 镜像 ..."
+              docker build \
+                --build-arg OPENCLAW_VERSION=${OPENCLAW_VERSION} \
+                --build-arg NODE_IMAGE_TAG=${NODE_IMAGE_TAG} \
+                -t devpilot-openclaw:${OPENCLAW_VERSION} \
+                -t devpilot-openclaw:latest \
+                -f dockerfiles/openclaw/Dockerfile \
+                .
+              echo "  [OK] OpenClaw 镜像构建完成"
+
+        # 构建 CC-Switch + Claude Code 镜像
+        - step: shell@1
+          name: build-cc-switch-claude
+          displayName: 构建 CC-Switch+Claude 镜像
+          inputs:
+            script: |
+              #!/bin/bash
+              set -e
+              echo "==> 构建 CC-Switch+Claude 镜像 ..."
+              docker build \
+                --build-arg CC_SWITCH_VERSION=${CC_SWITCH_VERSION} \
+                --build-arg CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION} \
+                --build-arg NODE_IMAGE_TAG=${NODE_IMAGE_TAG} \
+                -t devpilot-cc-switch-claude:${CC_SWITCH_VERSION} \
+                -t devpilot-cc-switch-claude:latest \
+                -f dockerfiles/cc-switch-claude/Dockerfile \
+                .
+              echo "  [OK] CC-Switch+Claude 镜像构建完成"
+
+  # ---- 阶段 3：推送镜像（仅 master/main 分支推送时触发） ----
+  - stage:
+      name: push-stage
+      displayName: 推送镜像至镜像仓库
+      dependsOn: build-stage
+      steps:
+        - step: shell@1
+          name: login-registry
+          displayName: 登录容器镜像仓库
+          inputs:
+            script: |
+              #!/bin/bash
+              set -e
+              # 镜像仓库地址（在 Gitee Go 流水线变量中配置）
+              # REGISTRY、REGISTRY_USER、REGISTRY_PASSWORD 需在流水线环境变量中设置
+              if [ -z "${REGISTRY}" ] || [ -z "${REGISTRY_USER}" ] || [ -z "${REGISTRY_PASSWORD}" ]; then
+                echo "[warn] 未配置镜像仓库变量（REGISTRY/REGISTRY_USER/REGISTRY_PASSWORD），跳过推送"
+                echo "请在 Gitee Go 流水线变量中配置后启用推送"
+                exit 0
+              fi
+              echo "==> 登录容器镜像仓库: ${REGISTRY}"
+              echo "${REGISTRY_PASSWORD}" | docker login "${REGISTRY}" -u "${REGISTRY_USER}" --password-stdin
+              echo "  [OK] 登录成功"
+
+        - step: shell@1
+          name: push-openclaw
+          displayName: 推送 OpenClaw 镜像
+          dependsOn: login-registry
+          inputs:
+            script: |
+              #!/bin/bash
+              set -e
+              if [ -z "${REGISTRY}" ]; then
+                echo "[skip] 未配置镜像仓库，跳过推送"
+                exit 0
+              fi
+              NAMESPACE="${REGISTRY_NAMESPACE:-devpilot}"
+              echo "==> 推送 OpenClaw 镜像 ..."
+              docker tag devpilot-openclaw:${OPENCLAW_VERSION} ${REGISTRY}/${NAMESPACE}/openclaw:${OPENCLAW_VERSION}
+              docker tag devpilot-openclaw:latest ${REGISTRY}/${NAMESPACE}/openclaw:latest
+              docker push ${REGISTRY}/${NAMESPACE}/openclaw:${OPENCLAW_VERSION}
+              docker push ${REGISTRY}/${NAMESPACE}/openclaw:latest
+              echo "  [OK] OpenClaw 镜像推送完成"
+
+        - step: shell@1
+          name: push-cc-switch-claude
+          displayName: 推送 CC-Switch+Claude 镜像
+          dependsOn: login-registry
+          inputs:
+            script: |
+              #!/bin/bash
+              set -e
+              if [ -z "${REGISTRY}" ]; then
+                echo "[skip] 未配置镜像仓库，跳过推送"
+                exit 0
+              fi
+              NAMESPACE="${REGISTRY_NAMESPACE:-devpilot}"
+              echo "==> 推送 CC-Switch+Claude 镜像 ..."
+              docker tag devpilot-cc-switch-claude:${CC_SWITCH_VERSION} ${REGISTRY}/${NAMESPACE}/cc-switch-claude:${CC_SWITCH_VERSION}
+              docker tag devpilot-cc-switch-claude:latest ${REGISTRY}/${NAMESPACE}/cc-switch-claude:latest
+              docker push ${REGISTRY}/${NAMESPACE}/cc-switch-claude:${CC_SWITCH_VERSION}
+              docker push ${REGISTRY}/${NAMESPACE}/cc-switch-claude:latest
+              echo "  [OK] CC-Switch+Claude 镜像推送完成"
+
+  # ---- 阶段 4：Trivy 安全扫描 ----
+  - stage:
+      name: scan-stage
+      displayName: Trivy 安全扫描
+      dependsOn: build-stage
+      steps:
+        - step: shell@1
+          name: install-trivy
+          displayName: 安装 Trivy 扫描工具
+          inputs:
+            script: |
+              #!/bin/bash
+              set -e
+              echo "==> 安装 Trivy ..."
+              if ! command -v trivy &>/dev/null; then
+                curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+                  | sh -s -- -b /usr/local/bin v0.50.0
+              fi
+              trivy --version
+              echo "  [OK] Trivy 安装完成"
+
+        - step: shell@1
+          name: scan-openclaw
+          displayName: 扫描 OpenClaw 镜像
+          dependsOn: install-trivy
+          inputs:
+            script: |
+              #!/bin/bash
+              set -e
+              echo "==> Trivy 扫描 OpenClaw 镜像 ..."
+              trivy image \
+                --severity CRITICAL,HIGH \
+                --exit-code 0 \
+                --format table \
+                devpilot-openclaw:${OPENCLAW_VERSION}
+              echo "  [OK] OpenClaw 镜像扫描完成"
+
+        - step: shell@1
+          name: scan-cc-switch-claude
+          displayName: 扫描 CC-Switch+Claude 镜像
+          dependsOn: install-trivy
+          inputs:
+            script: |
+              #!/bin/bash
+              set -e
+              echo "==> Trivy 扫描 CC-Switch+Claude 镜像 ..."
+              trivy image \
+                --severity CRITICAL,HIGH \
+                --exit-code 0 \
+                --format table \
+                devpilot-cc-switch-claude:${CC_SWITCH_VERSION}
+              echo "  [OK] CC-Switch+Claude 镜像扫描完成"
+
+        - step: shell@1
+          name: scan-fs
+          displayName: 扫描文件系统
+          dependsOn: install-trivy
+          inputs:
+            script: |
+              #!/bin/bash
+              set -e
+              echo "==> Trivy 扫描文件系统（配置文件安全检查）..."
+              trivy fs \
+                --severity CRITICAL,HIGH \
+                --exit-code 0 \
+                --ignore-unfixed \
+                --format table \
+                .
+              echo "  [OK] 文件系统扫描完成"

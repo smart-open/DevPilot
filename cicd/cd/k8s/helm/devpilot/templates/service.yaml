@@ -1,0 +1,69 @@
+{{/*
+DevPilot Helm Chart - Services
+为 3 个组件创建 Service
+*/}}
+
+# ---- Redis Service（仅集群内部访问）----
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "devpilot.redis.fullname" . }}
+  namespace: {{ include "devpilot.namespace" . }}
+  labels:
+    {{- include "devpilot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cache
+spec:
+  type: {{ .Values.service.redisType }}
+  selector:
+    {{- include "devpilot.redis.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: redis
+      port: {{ .Values.redis.port }}
+      targetPort: {{ .Values.redis.port }}
+      protocol: TCP
+
+---
+# ---- OpenClaw Service ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "devpilot.openclaw.fullname" . }}
+  namespace: {{ include "devpilot.namespace" . }}
+  labels:
+    {{- include "devpilot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bot
+spec:
+  type: {{ .Values.service.openclawType }}
+  selector:
+    {{- include "devpilot.openclaw.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: gateway
+      port: {{ .Values.openclaw.gatewayPort }}
+      targetPort: {{ .Values.openclaw.gatewayPort }}
+      {{- if and (eq .Values.service.openclawType "NodePort") .Values.service.openclawNodePort }}
+      nodePort: {{ .Values.service.openclawNodePort }}
+      {{- end }}
+      protocol: TCP
+
+---
+# ---- CC-Switch + Claude Code Service ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "devpilot.ccSwitchClaude.fullname" . }}
+  namespace: {{ include "devpilot.namespace" . }}
+  labels:
+    {{- include "devpilot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: coding
+spec:
+  type: {{ .Values.service.ccSwitchType }}
+  selector:
+    {{- include "devpilot.ccSwitchClaude.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: web
+      port: {{ .Values.ccSwitchClaude.webPort }}
+      targetPort: {{ .Values.ccSwitchClaude.webPort }}
+      {{- if and (eq .Values.service.ccSwitchType "NodePort") .Values.service.ccSwitchNodePort }}
+      nodePort: {{ .Values.service.ccSwitchNodePort }}
+      {{- end }}
+      protocol: TCP

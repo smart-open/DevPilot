@@ -1,0 +1,302 @@
+# ============================================================
+# DevPilot - GitLab CI/CD 服务自动部署流水线
+# 功能：扫描 workspace/ 下的服务，自动构建并部署
+# 触发：推送包含 service.yaml 变更的代码、手动触发
+#
+# 与 cicd/ci/gitlab/.gitlab-ci.yml 的区别：
+#   .gitlab-ci.yml              -> 部署 DevPilot 平台本身
+#   .gitlab-ci-service-deploy.yml -> 部署 Claude Code 开发出的服务
+#
+# 使用前请在 GitLab 项目中配置以下 CI/CD 变量：
+#   - KUBE_CONFIG (base64 编码的 kubeconfig，K8s 部署用)
+#   - REMOTE_SSH_KEY (SSH 私钥，远程 Docker 部署用)
+#   - REMOTE_DOCKER_HOST (远程 Docker 地址，如 ssh://root@server)
+#
+# 使用方式：
+#   cp cicd/service-deploy/ci/gitlab/.gitlab-ci-service-deploy.yml .gitlab-ci-service-deploy.yml
+#   或在 .gitlab-ci.yml 中 include:
+#     include: 'cicd/service-deploy/ci/gitlab/.gitlab-ci-service-deploy.yml'
+# ============================================================
+
+# ---- 全局默认配置 ----
+default:
+  image: docker:24.0-git
+  services:
+    - docker:24.0-dind
+  before_script:
+    - apk add --no-cache bash docker-compose findutils curl
+    - docker version
+    - docker info
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+
+# ---- 全局变量 ----
+variables:
+  IMAGE_TAG: "latest"
+  DEPLOY_TARGET: "auto"
+  BUILD_ONLY: "false"
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  GIT_DEPTH: "1"
+
+# ---- 公共规则模板（YAML 锚点复用，消除各 job 中重复的 rules 块） ----
+.rules-default: &rules-default
+  rules:
+    - changes:
+        - workspace/**/*
+        - cicd/service-deploy/**/*
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+    - when: manual
+
+# ---- 流水线阶段 ----
+stages:
+  - discover
+  - build
+  - deploy
+  - verify
+
+# ============================================================
+# 阶段 1：发现服务
+# ============================================================
+discover:services:
+  stage: discover
+  script:
+    - echo "==> 扫描 workspace/ 下的可部署服务..."
+    - |
+      chmod +x cicd/service-deploy/deploy-service.sh
+      bash cicd/service-deploy/deploy-service.sh --list
+    - |
+      COUNT=0
+      for dir in workspace/*/; do
+        if [ -f "${dir}service.yaml" ]; then
+          COUNT=$((COUNT + 1))
+        fi
+      done
+      echo ""
+      echo "==> 发现 ${COUNT} 个可部署服务"
+      if [ ${COUNT} -eq 0 ]; then
+        echo "[WARN] 未找到任何可部署的服务"
+        echo "  模板: cp cicd/service-deploy/service.yaml.example workspace/<service-name>/service.yaml"
+      fi
+  <<: *rules-default
+
+# ============================================================
+# 阶段 2：构建服务镜像
+# ============================================================
+build:services:
+  stage: build
+  needs: ["discover:services"]
+  script:
+    - echo "==> 构建所有服务镜像 (tag: ${IMAGE_TAG})..."
+    - |
+      FAILED=0
+      for dir in workspace/*/; do
+        if [ ! -f "${dir}service.yaml" ]; then
+          continue
+        fi
+
+        SVC=$(basename "${dir}")
+        echo ""
+        echo "---- 构建服务: ${SVC} ----"
+
+        if bash cicd/service-deploy/deploy-service.sh --service-dir "${dir}" --tag "${IMAGE_TAG}" --build-only; then
+          echo "  [OK] ${SVC} 镜像构建成功"
+        else
+          echo "  [FAIL] ${SVC} 镜像构建失败"
+          FAILED=$((FAILED + 1))
+        fi
+      done
+
+      if [ ${FAILED} -gt 0 ]; then
+        echo ""
+        echo "[ERROR] ${FAILED} 个服务镜像构建失败"
+        exit 1
+      fi
+
+      echo ""
+      echo "==> 所有服务镜像构建完成"
+  artifacts:
+    paths:
+      - workspace/
+    expire_in: 1 hour
+    exclude:
+      - workspace/**/node_modules/**/*
+      - workspace/**/.git/**/*
+  <<: *rules-default
+
+# ============================================================
+# 阶段 3：部署服务
+# ============================================================
+deploy:docker:
+  stage: deploy
+  needs: ["build:services"]
+  script:
+    - |
+      if [ "${BUILD_ONLY}" = "true" ]; then
+        echo "[SKIP] 仅构建模式，跳过部署"
+        exit 0
+      fi
+    - echo "==> 部署服务到 Docker (tag: ${IMAGE_TAG})..."
+    - |
+      source cicd/service-deploy/lib/yaml-parser.sh
+
+      FAILED=0
+      for dir in workspace/*/; do
+        if [ ! -f "${dir}service.yaml" ]; then
+          continue
+        fi
+
+        TARGET=$(yaml_get_nested "deploy.target" "${dir}service.yaml")
+        if [ "${TARGET}" != "docker" ] && [ "${DEPLOY_TARGET}" != "auto" ]; then
+          continue
+        fi
+
+        SVC=$(basename "${dir}")
+        echo ""
+        echo "---- 部署服务到 Docker: ${SVC} ----"
+
+        if bash cicd/service-deploy/deploy-service.sh --service-dir "${dir}" --tag "${IMAGE_TAG}"; then
+          echo "  [OK] ${SVC} 部署成功"
+        else
+          echo "  [FAIL] ${SVC} 部署失败"
+          FAILED=$((FAILED + 1))
+        fi
+      done
+
+      if [ ${FAILED} -gt 0 ]; then
+        echo ""
+        echo "[ERROR] ${FAILED} 个服务部署失败"
+        exit 1
+      fi
+
+      echo ""
+      echo "==> Docker 部署完成"
+  <<: *rules-default
+
+deploy:k8s:
+  stage: deploy
+  needs: ["build:services"]
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: [""]
+  script:
+    - |
+      if [ -z "${KUBE_CONFIG}" ]; then
+        echo "[SKIP] 未配置 KUBE_CONFIG 变量，跳过 K8s 部署"
+        exit 0
+      fi
+    - echo "==> 配置 K8s 连接..."
+    - |
+      mkdir -p $HOME/.kube
+      echo "${KUBE_CONFIG}" | base64 -d > $HOME/.kube/config
+      kubectl version --client
+    - echo "==> 部署服务到 Kubernetes (tag: ${IMAGE_TAG})..."
+    - |
+      source cicd/service-deploy/lib/yaml-parser.sh
+
+      FOUND=0
+      for dir in workspace/*/; do
+        if [ ! -f "${dir}service.yaml" ]; then
+          continue
+        fi
+
+        TARGET=$(yaml_get_nested "deploy.target" "${dir}service.yaml")
+        if [ "${TARGET}" != "k8s" ] && [ "${DEPLOY_TARGET}" != "auto" ]; then
+          continue
+        fi
+
+        FOUND=$((FOUND + 1))
+        SVC=$(basename "${dir}")
+        echo ""
+        echo "---- 部署服务到 K8s: ${SVC} ----"
+        bash cicd/service-deploy/deploy-service.sh --service-dir "${dir}" --tag "${IMAGE_TAG}"
+      done
+
+      if [ ${FOUND} -eq 0 ]; then
+        echo "[SKIP] 没有需要部署到 K8s 的服务"
+      fi
+
+      echo ""
+      echo "==> K8s 部署完成"
+  <<: *rules-default
+
+deploy:remote:
+  stage: deploy
+  needs: ["build:services"]
+  script:
+    - |
+      if [ -z "${REMOTE_SSH_KEY}" ] || [ -z "${REMOTE_DOCKER_HOST}" ]; then
+        echo "[SKIP] 未配置 REMOTE_SSH_KEY 或 REMOTE_DOCKER_HOST，跳过远程部署"
+        exit 0
+      fi
+    - echo "==> 配置 SSH 连接..."
+    - |
+      mkdir -p $HOME/.ssh
+      echo "${REMOTE_SSH_KEY}" > $HOME/.ssh/id_rsa
+      chmod 600 $HOME/.ssh/id_rsa
+      REMOTE_HOST=$(echo "${REMOTE_DOCKER_HOST}" | sed 's|ssh://||;s|tcp://||;s|.*@||')
+      ssh-keyscan -H "${REMOTE_HOST}" >> $HOME/.ssh/known_hosts 2>/dev/null || true
+    - echo "==> 部署服务到远程 Docker (tag: ${IMAGE_TAG})..."
+    - |
+      source cicd/service-deploy/lib/yaml-parser.sh
+
+      FAILED=0
+      for dir in workspace/*/; do
+        if [ ! -f "${dir}service.yaml" ]; then
+          continue
+        fi
+
+        TARGET=$(yaml_get_nested "deploy.target" "${dir}service.yaml")
+        if [ "${TARGET}" != "remote" ] && [ "${DEPLOY_TARGET}" != "auto" ]; then
+          continue
+        fi
+
+        SVC=$(basename "${dir}")
+        echo ""
+        echo "---- 部署服务到远程: ${SVC} ----"
+
+        if bash cicd/service-deploy/deploy-service.sh --service-dir "${dir}" --tag "${IMAGE_TAG}"; then
+          echo "  [OK] ${SVC} 远程部署成功"
+        else
+          echo "  [FAIL] ${SVC} 远程部署失败"
+          FAILED=$((FAILED + 1))
+        fi
+      done
+
+      if [ ${FAILED} -gt 0 ]; then
+        echo ""
+        echo "[ERROR] ${FAILED} 个服务远程部署失败"
+        exit 1
+      fi
+
+      echo ""
+      echo "==> 远程部署完成"
+  <<: *rules-default
+
+# ============================================================
+# 阶段 4：验证部署结果
+# ============================================================
+verify:services:
+  stage: verify
+  needs: ["deploy:docker"]
+  script:
+    - echo "==> 检查已部署服务的运行状态..."
+    - echo ""
+    - echo "---- Docker 容器状态 ----"
+    - docker ps --filter "name=devpilot-" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "  无 Docker 容器"
+    - echo ""
+    - |
+      if command -v kubectl &>/dev/null; then
+        echo "---- K8s Pod 状态 ----"
+        kubectl get pods -n devpilot-services 2>/dev/null || echo "  无 K8s 集群"
+        echo ""
+        echo "---- K8s Service 状态 ----"
+        kubectl get svc -n devpilot-services 2>/dev/null || echo "  无 K8s Service"
+      fi
+    - echo ""
+    - echo "==> 验证完成"
+  <<: *rules-default

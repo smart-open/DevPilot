@@ -1,0 +1,147 @@
+name: devpilot
+
+# ============================================================
+# DevPilot Docker Compose 一键部署
+# 3 个容器：Redis + OpenClaw + CC-Switch/Claude Code
+#
+# 用法:
+#   docker compose up -d --build          # 全部启动（默认）
+#   docker compose --profile bot up -d    # 仅飞书机器人（Redis + OpenClaw）
+#   docker compose --profile dev up -d    # 仅开发环境（CC-Switch + Claude Code）
+#
+# 首次使用推荐: ./init.sh && ./deploy.sh
+# ============================================================
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # ---- 1. Redis：缓存 + 持久化 ----
+  redis:
+    image: redis:8.8.1-alpine
+    container_name: devpilot-redis
+    restart: unless-stopped
+    profiles: ["", "full", "bot"]
+    command: >
+      redis-server /usr/local/etc/redis/redis.conf
+      --requirepass "${REDIS_PASSWORD}"
+    volumes:
+      - ./conf/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - ./data/redis:/data
+      - ./logs/redis:/logs
+    environment:
+      - TZ=${TZ}
+    networks:
+      - devpilot-network
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ---- 2. OpenClaw：飞书 AI 机器人 + agnes-ai ----
+  openclaw:
+    build:
+      context: .
+      dockerfile: dockerfiles/openclaw/Dockerfile
+      args:
+        OPENCLAW_VERSION: ${OPENCLAW_VERSION}
+        NODE_IMAGE_TAG: ${NODE_IMAGE_TAG}
+    container_name: devpilot-openclaw
+    restart: unless-stopped
+    profiles: ["", "full", "bot"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - TZ=${TZ}
+      - AGNES_API_KEY=${AGNES_API_KEY}
+      - AGNES_BASE_URL=${AGNES_BASE_URL}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      - OPENCLAW_GATEWAY_PORT=${OPENCLAW_GATEWAY_PORT}
+      - FEISHU_APP_ID=${FEISHU_APP_ID}
+      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    volumes:
+      - ./data/openclaw:/data/openclaw
+      - ./logs/openclaw:/logs
+    ports:
+      - "${OPENCLAW_GATEWAY_PORT}:18789"
+    networks:
+      - devpilot-network
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:18789/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+  # ---- 3. CC-Switch + Claude Code 合体容器 ----
+  cc-switch-claude:
+    build:
+      context: .
+      dockerfile: dockerfiles/cc-switch-claude/Dockerfile
+      args:
+        CC_SWITCH_VERSION: ${CC_SWITCH_VERSION}
+        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION}
+        NODE_IMAGE_TAG: ${NODE_IMAGE_TAG}
+    container_name: devpilot-cc-switch-claude
+    restart: unless-stopped
+    profiles: ["", "full", "dev"]
+    stdin_open: true
+    tty: true
+    depends_on:
+      openclaw:
+        condition: service_started
+    environment:
+      - TZ=${TZ}
+      - HOME=/home/node
+      # CC-Switch Web 通过 PORT 和 HOST 环境变量配置
+      - PORT=${CC_SWITCH_WEB_PORT}
+      - HOST=0.0.0.0
+      # agnes-ai 配置（CC-Switch 自动配置 + Claude Code fallback）
+      - AGNES_BASE_URL=${AGNES_BASE_URL}
+      - AGNES_API_KEY=${AGNES_API_KEY}
+      - ANTHROPIC_BASE_URL=${AGNES_BASE_URL}
+      - ANTHROPIC_API_KEY=${AGNES_API_KEY}
+      - ANTHROPIC_MODEL=${AGNES_MODEL_FLASH}
+      # 服务自动部署
+      - DEVPILOT_AUTO_DEPLOY=${DEVPILOT_AUTO_DEPLOY:-false}
+    volumes:
+      - ./workspace:/workspace
+      - ./data/cc-switch-claude:/home/node
+      - ./logs/cc-switch-claude:/logs
+    ports:
+      - "${CC_SWITCH_WEB_PORT}:${CC_SWITCH_WEB_PORT}"
+    networks:
+      - devpilot-network
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:${CC_SWITCH_WEB_PORT}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+
+networks:
+  devpilot-network:
+    driver: bridge
+    name: devpilot-network

@@ -1,0 +1,74 @@
+# ============================================================
+# DevPilot 服务部署描述符
+# 每个由 Claude Code 开发的服务在服务目录下放置此文件
+# 部署脚本 deploy-service.sh 读取此文件执行构建和部署
+# ============================================================
+
+# ---- 极简模式（仅需 name + deploy.target） ----
+# 如果服务目录下有 Dockerfile，build.type 自动推断为 dockerfile
+# 如果没有 Dockerfile但有 package.json，自动推断为 nodejs
+# 如果没有 Dockerfile但有 requirements.txt，自动推断为 python
+# 如果没有以上文件，自动推断为 static
+#
+# name: my-service
+# deploy:
+#   target: docker
+
+# ---- 完整配置示例 ----
+name: my-service                    # [必填] 服务名称
+description: "示例服务"              # [可选] 服务描述
+
+build:
+  type: dockerfile                  # [可选] 构建类型: dockerfile | static | nodejs | python（自动推断）
+  context: .                        # [可选] 构建上下文目录，默认 .
+  dockerfile: Dockerfile            # [可选] Dockerfile 路径，默认 Dockerfile
+  args:                             # [可选] Docker 构建参数
+    - NODE_ENV=production
+
+deploy:
+  target: docker                    # [必填] 部署目标: docker | k8s | remote
+
+  docker:
+    container_name: my-service      # [可选] 容器名，默认 devpilot-<name>
+    network: devpilot-network       # [可选] Docker 网络
+    ports:
+      - "8080:8080"
+    env_file: .env                  # [可选] 环境变量文件
+    env:
+      - LOG_LEVEL=info
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped         # [可选] 重启策略
+    memory_limit: 512M              # [可选] 内存限制
+
+  k8s:
+    namespace: devpilot-services    # [可选] 命名空间
+    replicas: 1                     # [可选] 副本数
+    image_pull_policy: IfNotPresent # [可选] 镜像拉取策略
+    service_type: NodePort          # [可选] Service 类型
+    node_port: 30080                # [可选] NodePort 端口
+    resources:                      # [可选] 资源限制
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  remote:
+    docker_host: ssh://root@server  # [必填] 远程 Docker 地址
+    network: devpilot-network       # [可选] 远程网络
+    ports:
+      - "8080:8080"
+
+ports:
+  - 8080
+
+healthcheck:
+  type: http                        # 检查类型: http | tcp | command
+  path: /health
+  port: 8080
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 30s

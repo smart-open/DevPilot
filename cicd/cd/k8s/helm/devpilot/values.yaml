@@ -1,0 +1,152 @@
+# ============================================================
+# DevPilot Helm Chart - values.yaml
+# 所有配置参数集中在此文件，可通过 -f 自定义 values 覆盖
+# 用法：
+#   helm install devpilot ./cicd/cd/k8s/helm/devpilot -f custom-values.yaml
+#   helm upgrade devpilot ./cicd/cd/k8s/helm/devpilot -f custom-values.yaml
+# ============================================================
+
+# ---- 全局配置 ----
+global:
+  # 命名空间（默认为 devpilot）
+  namespace: devpilot
+  # 镜像拉取策略
+  imagePullPolicy: IfNotPresent
+  # 镜像拉取 Secret（如使用私有镜像仓库）
+  # imagePullSecrets:
+  #   - name: regcred
+  # 时区
+  tz: "Asia/Shanghai"
+
+# ---- agnes-ai 大模型配置 ----
+agnes:
+  # API 地址
+  baseUrl: "https://apihub.agnes-ai.com/v1"
+  # API 密钥（敏感，建议通过 --set 或外部 Secret 注入）
+  apiKey: "your-agnes-api-key"
+  # 模型名称
+  modelFlash: "agnes-2.0-flash"
+  modelImage: "agnes-image-2.1-flash"
+  modelVideo: "agnes-video-v2.0"
+
+# ---- 飞书配置 ----
+feishu:
+  # WebSocket 长连接模式，仅需 App ID 和 App Secret
+  appId: "your-feishu-app-id"
+  appSecret: "your-feishu-app-secret"
+
+# ---- Redis 配置 ----
+redis:
+  image: "redis:8.8.1-alpine"
+  password: "change-me-to-strong-password"
+  port: 6379
+  # 持久化
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 1Gi
+  # 资源限制
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+  # 内存配置
+  maxmemory: "512mb"
+  maxmemoryPolicy: "allkeys-lru"
+
+# ---- OpenClaw 配置 ----
+openclaw:
+  # 镜像地址（需替换为实际镜像仓库地址）
+  # 本地构建: devpilot-openclaw:latest
+  # GHCR: ghcr.io/<owner>/<repo>/openclaw:latest
+  image: "devpilot-openclaw:latest"
+  version: "2026.7.1-2"
+  # Gateway 端口
+  gatewayPort: 18789
+  # Gateway 认证 Token（敏感）
+  gatewayToken: "change-me-to-secure-token"
+  # 持久化
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 2Gi
+  # 资源限制
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# ---- CC-Switch + Claude Code 配置 ----
+ccSwitchClaude:
+  # 镜像地址（需替换为实际镜像仓库地址）
+  image: "devpilot-cc-switch-claude:latest"
+  ccSwitchVersion: "v0.21.0"
+  claudeCodeVersion: "2.1.220"
+  # Web UI 端口
+  webPort: 8890
+  # 持久化：Claude Code 工作空间
+  workspacePersistence:
+    enabled: true
+    storageClass: ""
+    size: 5Gi
+  # 持久化：CC-Switch 配置
+  configPersistence:
+    enabled: true
+    storageClass: ""
+    size: 2Gi
+  # 资源限制
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+  # 交互式终端（Claude Code 需要）
+  interactive: true
+  # 服务自动部署（开发完成后自动部署 workspace/ 下有变更的服务）
+  autoDeploy: "false"
+
+# ---- Node.js 基础镜像版本 ----
+nodeImageTag: "22.23.1-bookworm"
+
+# ---- 服务配置 ----
+service:
+  # Redis 服务类型（仅内部访问）
+  redisType: ClusterIP
+  # OpenClaw 服务类型
+  openclawType: NodePort
+  # CC-Switch 服务类型
+  ccSwitchType: NodePort
+  # NodePort 端口（留空则自动分配）
+  openclawNodePort: ""
+  ccSwitchNodePort: ""
+
+# ---- Ingress 配置（可选）----
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+    # nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    # nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  # OpenClaw 域名
+  openclawHost: "openclaw.your-domain.com"
+  # CC-Switch 域名
+  ccSwitchHost: "cc-switch.your-domain.com"
+  # TLS 配置
+  tls:
+    enabled: false
+    secretName: "devpilot-tls"
+
+# ---- 外部 Secret 引用（可选，用于生产环境）----
+# 如使用 External Secrets / Sealed Secrets 管理密钥，可引用外部 Secret
+externalSecret:
+  enabled: false
+  name: "devpilot-external-secret"

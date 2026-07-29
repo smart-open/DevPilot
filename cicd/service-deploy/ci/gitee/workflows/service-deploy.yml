@@ -1,0 +1,285 @@
+# ============================================================
+# DevPilot - Gitee Go 服务自动部署流水线
+# 功能：扫描 workspace/ 下的服务，自动构建并部署
+# 触发：推送包含 service.yaml 变更的代码、手动触发
+#
+# 与 cicd/ci/gitee/workflows/ci.yml 的区别：
+#   ci.yml       -> 部署 DevPilot 平台本身（Redis/OpenClaw/CC-Switch）
+#   本流水线      -> 部署 Claude Code 开发出的服务
+#
+# 注意：此文件需放置在仓库根目录的 .workflow/ 下才能被 Gitee Go 识别
+# ============================================================
+version: '1.0'
+name: devpilot-service-deploy
+displayName: DevPilot 服务自动部署
+
+# ---- 触发条件 ----
+triggers:
+  push:
+    - branches:
+        include:
+          - master
+          - main
+      paths:
+        include:
+          - workspace/**
+          - cicd/service-deploy/**
+
+# ---- 全局变量 ----
+vars:
+  IMAGE_TAG: "latest"
+  # 部署目标: docker | k8s | remote | auto
+  DEPLOY_TARGET: "auto"
+  BUILD_ONLY: "false"
+
+# ============================================================
+# 流水线阶段
+# ============================================================
+stages:
+  # ---- 阶段 1：发现服务 ----
+  - stage:
+      name: discover-stage
+      displayName: 发现可部署服务
+      steps:
+        - step: shell@1
+          name: discover-services
+          displayName: 扫描 workspace 目录
+          inputs:
+            script: |
+              #!/bin/bash
+              set -e
+
+              echo "==> 扫描 workspace/ 下的可部署服务..."
+
+              DEPLOY_SCRIPT="cicd/service-deploy/deploy-service.sh"
+              chmod +x "${DEPLOY_SCRIPT}"
+
+              # 列出所有服务
+              bash "${DEPLOY_SCRIPT}" --list
+
+              # 统计服务数量
+              COUNT=0
+              for dir in workspace/*/; do
+                if [ -f "${dir}service.yaml" ]; then
+                  COUNT=$((COUNT + 1))
+                fi
+              done
+
+              echo ""
+              echo "==> 发现 ${COUNT} 个可部署服务"
+
+              if [ ${COUNT} -eq 0 ]; then
+                echo "[WARN] 未找到任何可部署的服务"
+                echo "  在 workspace/ 下的服务目录中创建 service.yaml 即可"
+                echo "  模板: cp cicd/service-deploy/service.yaml.example workspace/<service-name>/service.yaml"
+              fi
+
+  # ---- 阶段 2：构建服务镜像 ----
+  - stage:
+      name: build-stage
+      displayName: 构建服务镜像
+      dependsOn: discover-stage
+      steps:
+        # 缓存构建依赖（Docker 层 / npm / pip），加速重复构建
+        # 使用 Gitee Go 原生 cache 步骤持久化缓存目录，跨流水线复用
+        - step: cache@1
+          name: cache-build-deps
+          displayName: 缓存构建依赖
+          inputs:
+            key: devpilot-build-cache
+            path:
+              - /tmp/.docker-cache
+              - /root/.cache/pip
+              - /root/.npm
+
+        - step: shell@1
+          name: build-all-services
+          displayName: 构建所有服务镜像
+          inputs:
+            script: |
+              #!/bin/bash
+              set -e
+
+              DEPLOY_SCRIPT="cicd/service-deploy/deploy-service.sh"
+              IMAGE_TAG="${IMAGE_TAG:-latest}"
+
+              # 配置构建缓存（供 deploy-service.sh 构建 Docker 镜像时复用）
+              # deploy-service.sh 应通过 --cache-from / --cache-to 复用本地缓存层
+              export DOCKER_BUILD_CACHE_FROM="type=local,src=/tmp/.docker-cache"
+              export DOCKER_BUILD_CACHE_TO="type=local,dest=/tmp/.docker-cache,mode=max"
+              # npm / pip 缓存目录（已在 cache-build-deps 步骤中持久化）
+              export npm_config_cache="/root/.npm"
+              export PIP_CACHE_DIR="/root/.cache/pip"
+
+              echo "==> 构建所有服务镜像 (tag: ${IMAGE_TAG})..."
+
+              FAILED=0
+              for dir in workspace/*/; do
+                if [ ! -f "${dir}service.yaml" ]; then
+                  continue
+                fi
+
+                SVC=$(basename "${dir}")
+                echo ""
+                echo "---- 构建服务: ${SVC} ----"
+
+                if bash "${DEPLOY_SCRIPT}" --service-dir "${dir}" --tag "${IMAGE_TAG}" --build-only; then
+                  echo "  [OK] ${SVC} 镜像构建成功"
+                else
+                  echo "  [FAIL] ${SVC} 镜像构建失败"
+                  FAILED=$((FAILED + 1))
+                fi
+              done
+
+              if [ ${FAILED} -gt 0 ]; then
+                echo ""
+                echo "[ERROR] ${FAILED} 个服务镜像构建失败"
+                exit 1
+              fi
+
+              echo ""
+              echo "==> 所有服务镜像构建完成"
+
+  # ---- 阶段 3：部署服务 ----
+  - stage:
+      name: deploy-stage
+      displayName: 部署服务
+      dependsOn: build-stage
+      steps:
+        # Docker 本地部署
+        - step: shell@1
+          name: deploy-docker
+          displayName: 部署到 Docker
+          condition: |
+            # 仅在 DEPLOY_TARGET 为 docker 或 auto 时执行
+            [[ "${DEPLOY_TARGET}" == "docker" || "${DEPLOY_TARGET}" == "auto" ]]
+          inputs:
+            script: |
+              #!/bin/bash
+              set -e
+
+              DEPLOY_SCRIPT="cicd/service-deploy/deploy-service.sh"
+              IMAGE_TAG="${IMAGE_TAG:-latest}"
+              BUILD_ONLY="${BUILD_ONLY:-false}"
+
+              if [ "${BUILD_ONLY}" = "true" ]; then
+                echo "[SKIP] 仅构建模式，跳过部署"
+                exit 0
+              fi
+
+              echo "==> 部署服务到 Docker (tag: ${IMAGE_TAG})..."
+
+              FAILED=0
+              for dir in workspace/*/; do
+                if [ ! -f "${dir}service.yaml" ]; then
+                  continue
+                fi
+
+                # 检查部署目标是否为 docker
+                TARGET=$(bash -c "source cicd/service-deploy/lib/yaml-parser.sh && yaml_get_nested 'deploy.target' '${dir}service.yaml'")
+                if [ "${TARGET}" != "docker" ] && [ "${DEPLOY_TARGET}" != "auto" ]; then
+                  continue
+                fi
+
+                SVC=$(basename "${dir}")
+                echo ""
+                echo "---- 部署服务: ${SVC} ----"
+
+                if bash "${DEPLOY_SCRIPT}" --service-dir "${dir}" --tag "${IMAGE_TAG}"; then
+                  echo "  [OK] ${SVC} 部署成功"
+                else
+                  echo "  [FAIL] ${SVC} 部署失败"
+                  FAILED=$((FAILED + 1))
+                fi
+              done
+
+              if [ ${FAILED} -gt 0 ]; then
+                echo ""
+                echo "[ERROR] ${FAILED} 个服务部署失败"
+                exit 1
+              fi
+
+              echo ""
+              echo "==> Docker 部署完成"
+
+        # K8s 部署
+        - step: shell@1
+          name: deploy-k8s
+          displayName: 部署到 Kubernetes
+          condition: |
+            [[ "${DEPLOY_TARGET}" == "k8s" || "${DEPLOY_TARGET}" == "auto" ]]
+          inputs:
+            script: |
+              #!/bin/bash
+              set -e
+
+              if ! command -v kubectl &>/dev/null; then
+                echo "[SKIP] 未安装 kubectl，跳过 K8s 部署"
+                exit 0
+              fi
+
+              DEPLOY_SCRIPT="cicd/service-deploy/deploy-service.sh"
+              IMAGE_TAG="${IMAGE_TAG:-latest}"
+
+              echo "==> 部署服务到 Kubernetes (tag: ${IMAGE_TAG})..."
+
+              FOUND=0
+              for dir in workspace/*/; do
+                if [ ! -f "${dir}service.yaml" ]; then
+                  continue
+                fi
+
+                TARGET=$(bash -c "source cicd/service-deploy/lib/yaml-parser.sh && yaml_get_nested 'deploy.target' '${dir}service.yaml'")
+                if [ "${TARGET}" != "k8s" ] && [ "${DEPLOY_TARGET}" != "auto" ]; then
+                  continue
+                fi
+
+                FOUND=$((FOUND + 1))
+                SVC=$(basename "${dir}")
+                echo ""
+                echo "---- 部署服务到 K8s: ${SVC} ----"
+
+                bash "${DEPLOY_SCRIPT}" --service-dir "${dir}" --tag "${IMAGE_TAG}"
+              done
+
+              if [ ${FOUND} -eq 0 ]; then
+                echo "[SKIP] 没有需要部署到 K8s 的服务"
+              fi
+
+              echo ""
+              echo "==> K8s 部署完成"
+
+  # ---- 阶段 4：验证服务 ----
+  - stage:
+      name: verify-stage
+      displayName: 验证部署结果
+      dependsOn: deploy-stage
+      steps:
+        - step: shell@1
+          name: verify-services
+          displayName: 检查服务运行状态
+          inputs:
+            script: |
+              #!/bin/bash
+              set -e
+
+              echo "==> 检查已部署服务的运行状态..."
+              echo ""
+
+              # Docker 服务状态
+              echo "---- Docker 容器状态 ----"
+              docker ps --filter "name=devpilot-" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "  无 Docker 容器"
+
+              echo ""
+
+              # K8s 服务状态
+              if command -v kubectl &>/dev/null; then
+                echo "---- K8s Pod 状态 ----"
+                kubectl get pods -n devpilot-services --field-selector=status.phase!=Running 2>/dev/null || echo "  所有 Pod 运行正常"
+                echo ""
+                echo "---- K8s Service 状态 ----"
+                kubectl get svc -n devpilot-services 2>/dev/null || echo "  无 K8s Service"
+              fi
+
+              echo ""
+              echo "==> 验证完成"

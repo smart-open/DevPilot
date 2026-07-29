@@ -1,0 +1,297 @@
+# ============================================================
+# DevPilot - GitLab CI/CD 流水线配置
+# 功能：代码检查、构建 Docker 镜像（Docker-in-Docker）、推送至 GitLab 镜像仓库
+# 阶段：lint -> build -> push -> scan
+#
+# 使用前请在 GitLab 项目中配置以下 CI/CD 变量：
+#   - CI_REGISTRY（GitLab 内置，通常为 registry.gitlab.com）
+#   - CI_REGISTRY_USER（GitLab 内置）
+#   - CI_REGISTRY_PASSWORD（GitLab 内置）
+#   - CI_REGISTRY_IMAGE（GitLab 内置，镜像仓库地址）
+# ============================================================
+
+# ---- 全局默认配置 ----
+default:
+  # 使用 Docker-in-Docker 镜像
+  image: docker:24.0-git
+  services:
+    - docker:24.0-dind
+  # 所有任务前置：安装 docker-compose 插件
+  before_script:
+    - apk add --no-cache docker-compose bash findutils
+    - docker version
+    - docker info
+  # 重试策略
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+
+# ---- 全局变量（构建参数，与 .env.example 保持一致） ----
+variables:
+  NODE_IMAGE_TAG: "22.23.1-bookworm"
+  OPENCLAW_VERSION: "2026.7.1-2"
+  CC_SWITCH_VERSION: "v0.21.0"
+  CLAUDE_CODE_VERSION: "2.1.220"
+  # Docker-in-Docker 配置
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  # GitLab 镜像仓库前缀（使用内置 CI_REGISTRY_IMAGE 变量）
+  IMAGE_OPENCLAW: "${CI_REGISTRY_IMAGE}/openclaw"
+  IMAGE_CC_SWITCH_CLAUDE: "${CI_REGISTRY_IMAGE}/cc-switch-claude"
+  # 镜像缓存配置
+  GIT_DEPTH: "1"
+
+# ---- 流水线阶段 ----
+stages:
+  - lint
+  - build
+  - push
+  - scan
+
+# ============================================================
+# 阶段 1：代码检查（Lint）
+# ============================================================
+lint:shell-scripts:
+  stage: lint
+  script:
+    - echo "==> 检查所有 shell 脚本语法 ..."
+    - |
+      FAIL=0
+      while IFS= read -r file; do
+        if bash -n "$file"; then
+          echo "  [OK] $file"
+        else
+          echo "  [FAIL] $file"
+          FAIL=1
+        fi
+      done < <(find . -name '*.sh' -not -path './node_modules/*')
+      if [ "$FAIL" -eq 1 ]; then
+        echo "存在语法错误的 shell 脚本，请修复后重试"
+        exit 1
+      fi
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+    - when: manual
+
+lint:dockerfiles:
+  stage: lint
+  script:
+    - echo "==> 检查 Dockerfile 是否存在 ..."
+    - |
+      for df in dockerfiles/openclaw/Dockerfile dockerfiles/cc-switch-claude/Dockerfile; do
+        if [ -f "$df" ]; then
+          echo "  [OK] $df"
+        else
+          echo "  [FAIL] 缺少 $df"
+          exit 1
+        fi
+      done
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+
+lint:compose:
+  stage: lint
+  script:
+    - echo "==> 检查 docker-compose.yml 语法 ..."
+    - |
+      if [ -f docker-compose.yml ]; then
+        docker compose -f docker-compose.yml config -q && echo "  [OK] docker-compose.yml 语法正确"
+      else
+        echo "  [FAIL] 缺少 docker-compose.yml"
+        exit 1
+      fi
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+
+lint:env-template:
+  stage: lint
+  script:
+    - echo "==> 检查 .env.example 变量完整性 ..."
+    - |
+      REQUIRED_VARS="AGNES_API_KEY AGNES_BASE_URL FEISHU_APP_ID FEISHU_APP_SECRET REDIS_PASSWORD OPENCLAW_GATEWAY_TOKEN OPENCLAW_GATEWAY_PORT CC_SWITCH_WEB_PORT NODE_IMAGE_TAG OPENCLAW_VERSION CC_SWITCH_VERSION CLAUDE_CODE_VERSION TZ"
+      for var in $REQUIRED_VARS; do
+        if grep -q "^${var}=" .env.example; then
+          echo "  [OK] ${var}"
+        else
+          echo "  [FAIL] .env.example 缺少变量: ${var}"
+          exit 1
+        fi
+      done
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+
+# ============================================================
+# 阶段 2：构建 Docker 镜像
+# ============================================================
+build:openclaw:
+  stage: build
+  needs: ["lint:shell-scripts", "lint:dockerfiles", "lint:compose", "lint:env-template"]
+  script:
+    - echo "==> 构建 OpenClaw 镜像 ..."
+    # 使用 BuildKit 构建以获得更好的缓存支持
+    - export DOCKER_BUILDKIT=1
+    - |
+      docker build \
+        --build-arg OPENCLAW_VERSION=${OPENCLAW_VERSION} \
+        --build-arg NODE_IMAGE_TAG=${NODE_IMAGE_TAG} \
+        --cache-from type=registry,ref=${IMAGE_OPENCLAW}:buildcache \
+        --cache-to type=registry,ref=${IMAGE_OPENCLAW}:buildcache,mode=max \
+        -t ${IMAGE_OPENCLAW}:${OPENCLAW_VERSION} \
+        -t ${IMAGE_OPENCLAW}:latest \
+        -t ${IMAGE_OPENCLAW}:${CI_COMMIT_SHORT_SHA} \
+        -f dockerfiles/openclaw/Dockerfile \
+        .
+    - echo "  [OK] OpenClaw 镜像构建完成"
+    # 导出镜像为 artifact 供后续阶段使用（避免重复构建）
+    - docker save ${IMAGE_OPENCLAW}:${CI_COMMIT_SHORT_SHA} -o openclaw-image.tar
+  artifacts:
+    paths:
+      - openclaw-image.tar
+    expire_in: 1 hour
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+    - when: manual
+
+build:cc-switch-claude:
+  stage: build
+  needs: ["lint:shell-scripts", "lint:dockerfiles", "lint:compose", "lint:env-template"]
+  script:
+    - echo "==> 构建 CC-Switch+Claude 镜像 ..."
+    - export DOCKER_BUILDKIT=1
+    - |
+      docker build \
+        --build-arg CC_SWITCH_VERSION=${CC_SWITCH_VERSION} \
+        --build-arg CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION} \
+        --build-arg NODE_IMAGE_TAG=${NODE_IMAGE_TAG} \
+        --cache-from type=registry,ref=${IMAGE_CC_SWITCH_CLAUDE}:buildcache \
+        --cache-to type=registry,ref=${IMAGE_CC_SWITCH_CLAUDE}:buildcache,mode=max \
+        -t ${IMAGE_CC_SWITCH_CLAUDE}:${CC_SWITCH_VERSION} \
+        -t ${IMAGE_CC_SWITCH_CLAUDE}:latest \
+        -t ${IMAGE_CC_SWITCH_CLAUDE}:${CI_COMMIT_SHORT_SHA} \
+        -f dockerfiles/cc-switch-claude/Dockerfile \
+        .
+    - echo "  [OK] CC-Switch+Claude 镜像构建完成"
+    - docker save ${IMAGE_CC_SWITCH_CLAUDE}:${CI_COMMIT_SHORT_SHA} -o cc-switch-claude-image.tar
+  artifacts:
+    paths:
+      - cc-switch-claude-image.tar
+    expire_in: 1 hour
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+    - when: manual
+
+# ============================================================
+# 阶段 3：推送镜像至 GitLab 镜像仓库
+# ============================================================
+push:openclaw:
+  stage: push
+  needs: ["build:openclaw"]
+  script:
+    - echo "==> 登录 GitLab 镜像仓库 ..."
+    - docker login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
+    - echo "==> 加载 OpenClaw 镜像 ..."
+    - docker load -i openclaw-image.tar
+    - echo "==> 推送 OpenClaw 镜像 ..."
+    - docker push ${IMAGE_OPENCLAW}:${OPENCLAW_VERSION}
+    - docker push ${IMAGE_OPENCLAW}:latest
+    - docker push ${IMAGE_OPENCLAW}:${CI_COMMIT_SHORT_SHA}
+    - echo "  [OK] OpenClaw 镜像推送完成"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+
+push:cc-switch-claude:
+  stage: push
+  needs: ["build:cc-switch-claude"]
+  script:
+    - echo "==> 登录 GitLab 镜像仓库 ..."
+    - docker login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
+    - echo "==> 加载 CC-Switch+Claude 镜像 ..."
+    - docker load -i cc-switch-claude-image.tar
+    - echo "==> 推送 CC-Switch+Claude 镜像 ..."
+    - docker push ${IMAGE_CC_SWITCH_CLAUDE}:${CC_SWITCH_VERSION}
+    - docker push ${IMAGE_CC_SWITCH_CLAUDE}:latest
+    - docker push ${IMAGE_CC_SWITCH_CLAUDE}:${CI_COMMIT_SHORT_SHA}
+    - echo "  [OK] CC-Switch+Claude 镜像推送完成"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+
+# ============================================================
+# 阶段 4：Trivy 安全扫描
+# ============================================================
+scan:openclaw:
+  stage: scan
+  needs: ["build:openclaw"]
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  variables:
+    TRIVY_NO_PROGRESS: "true"
+    TRIVY_CACHE_DIR: "/trivy-cache"
+  script:
+    - echo "==> Trivy 扫描 OpenClaw 镜像 ..."
+    - docker load -i openclaw-image.tar
+    - trivy image --severity CRITICAL,HIGH --exit-code 0 --format json --output trivy-openclaw-report.json ${IMAGE_OPENCLAW}:${CI_COMMIT_SHORT_SHA}
+    - trivy image --severity CRITICAL,HIGH --exit-code 0 --format table ${IMAGE_OPENCLAW}:${CI_COMMIT_SHORT_SHA}
+    - echo "  [OK] OpenClaw 镜像扫描完成"
+  artifacts:
+    reports:
+      secret_detection: trivy-openclaw-report.json
+    paths:
+      - trivy-openclaw-report.json
+    expire_in: 7 days
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+
+scan:cc-switch-claude:
+  stage: scan
+  needs: ["build:cc-switch-claude"]
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  variables:
+    TRIVY_NO_PROGRESS: "true"
+    TRIVY_CACHE_DIR: "/trivy-cache"
+  script:
+    - echo "==> Trivy 扫描 CC-Switch+Claude 镜像 ..."
+    - docker load -i cc-switch-claude-image.tar
+    - trivy image --severity CRITICAL,HIGH --exit-code 0 --format json --output trivy-cc-switch-report.json ${IMAGE_CC_SWITCH_CLAUDE}:${CI_COMMIT_SHORT_SHA}
+    - trivy image --severity CRITICAL,HIGH --exit-code 0 --format table ${IMAGE_CC_SWITCH_CLAUDE}:${CI_COMMIT_SHORT_SHA}
+    - echo "  [OK] CC-Switch+Claude 镜像扫描完成"
+  artifacts:
+    reports:
+      secret_detection: trivy-cc-switch-report.json
+    paths:
+      - trivy-cc-switch-report.json
+    expire_in: 7 days
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+
+scan:filesystem:
+  stage: scan
+  needs: ["lint:shell-scripts"]
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  variables:
+    TRIVY_NO_PROGRESS: "true"
+    TRIVY_CACHE_DIR: "/trivy-cache"
+  script:
+    - echo "==> Trivy 扫描文件系统（配置文件安全检查）..."
+    - trivy fs --severity CRITICAL,HIGH --exit-code 0 --ignore-unfixed --format table .
+    - echo "  [OK] 文件系统扫描完成"
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"

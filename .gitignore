@@ -1,0 +1,36 @@
+# 环境变量（含密钥，不可提交）
+.env
+.env.bak.*
+.env.local
+
+# 持久化数据
+data/
+
+# 日志
+logs/
+
+# 备份
+backups/
+
+# Claude Code 工作空间内容
+workspace/*
+!workspace/.gitkeep
+
+# CC-Switch 运行时配置
+conf/cc-switch-claude/runtime/
+
+# Helm 临时文件
+cicd/cd/k8s/helm/values-override.yaml
+
+# 系统文件
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE 内部文件
+.trae/
+.trae-html-share-packages/
+.vscode/
+.idea/

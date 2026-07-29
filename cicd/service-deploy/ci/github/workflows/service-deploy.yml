@@ -1,0 +1,257 @@
+# ============================================================
+# DevPilot - GitHub Actions 服务自动部署工作流
+# 功能：扫描 workspace/ 下的服务，自动构建并部署
+# 触发：推送包含 service.yaml 变更的代码、手动触发、API 调用
+#
+# 与 cicd/ci/github/workflows/ci.yml 的区别：
+#   ci.yml       -> 部署 DevPilot 平台本身（Redis/OpenClaw/CC-Switch）
+#   本工作流      -> 部署 Claude Code 开发出的服务
+# ============================================================
+name: DevPilot Service Deploy
+
+on:
+  # 推送代码时触发（仅当 workspace/ 或 service-deploy/ 有变更时）
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'workspace/**'
+      - 'cicd/service-deploy/**'
+  # 手动触发，可选择服务名和标签
+  workflow_dispatch:
+    inputs:
+      service_name:
+        description: '服务名称（留空部署所有有变更的服务）'
+        required: false
+        default: ''
+      image_tag:
+        description: '镜像标签（默认 latest）'
+        required: false
+        default: 'latest'
+      deploy_target:
+        description: '部署目标（docker/k8s/remote/auto）'
+        required: false
+        default: 'auto'
+      build_only:
+        description: '仅构建不部署'
+        required: false
+        default: 'false'
+  # 通过 Repository Dispatch API 触发（可由飞书 Bot / 其他系统调用）
+  repository_dispatch:
+    types:
+      - deploy-service
+
+env:
+  # 默认镜像标签
+  IMAGE_TAG: ${{ github.event.inputs.image_tag || 'latest' }}
+  # Docker Buildx 缓存配置（供 deploy-service.sh 构建镜像时使用）
+  # 通过 --cache-from / --cache-to 复用本地缓存层，加速重复构建
+  BUILDX_CACHE_FROM: "type=local,src=/tmp/.buildx-cache"
+  BUILDX_CACHE_TO: "type=local,dest=/tmp/.buildx-cache-new,mode=max"
+
+jobs:
+  # ============================================================
+  # 任务 1：发现并部署服务
+  # ============================================================
+  deploy-services:
+    name: 部署服务
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 缓存 Docker 层
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: 安装 kubectl（K8s 部署模式）
+        if: github.event.inputs.deploy_target == 'k8s' || github.event.inputs.deploy_target == 'auto'
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'latest'
+
+      - name: 配置 K8s 连接（K8s 部署模式）
+        if: github.event.inputs.deploy_target == 'k8s' || github.event.inputs.deploy_target == 'auto'
+        run: |
+          if [ -n "${{ secrets.KUBE_CONFIG }}" ]; then
+            mkdir -p $HOME/.kube
+            echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+            echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
+            echo "[OK] K8s 配置已加载"
+          else
+            echo "[WARN] 未配置 KUBE_CONFIG secret，K8s 部署将不可用"
+          fi
+
+      - name: 配置 SSH 远程连接（Remote Docker 部署模式）
+        if: github.event.inputs.deploy_target == 'remote' || github.event.inputs.deploy_target == 'auto'
+        run: |
+          if [ -n "${{ secrets.REMOTE_SSH_KEY }}" ]; then
+            mkdir -p $HOME/.ssh
+            echo "${{ secrets.REMOTE_SSH_KEY }}" > $HOME/.ssh/id_rsa
+            chmod 600 $HOME/.ssh/id_rsa
+            # 添加远程主机到 known_hosts
+            REMOTE_HOST=$(echo "${{ secrets.REMOTE_DOCKER_HOST }}" | sed 's|ssh://||;s|tcp://||;s|.*@||')
+            if [ -n "${REMOTE_HOST}" ]; then
+              ssh-keyscan -H "${REMOTE_HOST}" >> $HOME/.ssh/known_hosts 2>/dev/null || true
+            fi
+            echo "[OK] SSH 配置已加载"
+          else
+            echo "[WARN] 未配置 REMOTE_SSH_KEY secret，远程部署将不可用"
+          fi
+
+      - name: 发现并部署服务
+        run: |
+          #!/bin/bash
+          set -e
+
+          SERVICE_NAME="${{ github.event.inputs.service_name || github.event.client_payload.service_name || '' }}"
+          IMAGE_TAG="${IMAGE_TAG:-latest}"
+          DEPLOY_TARGET="${{ github.event.inputs.deploy_target || 'auto' }}"
+          BUILD_ONLY="${{ github.event.inputs.build_only || 'false' }}"
+
+          echo "========================================"
+          echo "  DevPilot 服务自动部署"
+          echo "========================================"
+          echo "  服务名称:   ${SERVICE_NAME:-（全部有变更的服务）}"
+          echo "  镜像标签:   ${IMAGE_TAG}"
+          echo "  部署目标:   ${DEPLOY_TARGET}"
+          echo "  仅构建:     ${BUILD_ONLY}"
+          echo "========================================"
+          echo ""
+
+          DEPLOY_SCRIPT="cicd/service-deploy/deploy-service.sh"
+          chmod +x "${DEPLOY_SCRIPT}"
+
+          # Docker Buildx 缓存说明：
+          # 环境变量 BUILDX_CACHE_FROM / BUILDX_CACHE_TO 已在 workflow env 中定义，
+          # deploy-service.sh 构建镜像时应通过以下参数复用缓存层：
+          #   docker buildx build \
+          #     --cache-from "${BUILDX_CACHE_FROM}" \
+          #     --cache-to   "${BUILDX_CACHE_TO}" \
+          #     -t <image> ...
+          # 缓存层由上方 "缓存 Docker 层" 步骤通过 actions/cache 持久化。
+
+          # ---- 指定服务名：直接部署 ----
+          if [ -n "${SERVICE_NAME}" ]; then
+            SVC_DIR="workspace/${SERVICE_NAME}"
+            if [ ! -f "${SVC_DIR}/service.yaml" ]; then
+              echo "[ERROR] 服务不存在: ${SERVICE_NAME}"
+              echo "  未找到 ${SVC_DIR}/service.yaml"
+              exit 1
+            fi
+
+            ARGS="--service-dir ${SVC_DIR} --tag ${IMAGE_TAG}"
+            if [ "${BUILD_ONLY}" = "true" ]; then
+              ARGS="${ARGS} --build-only"
+            fi
+
+            echo "==> 部署服务: ${SERVICE_NAME}"
+            bash "${DEPLOY_SCRIPT}" ${ARGS}
+            exit $?
+          fi
+
+          # ---- 未指定服务名：扫描并部署所有有变更的服务 ----
+          echo "==> 扫描 workspace/ 下的可部署服务..."
+
+          FOUND=0
+          for dir in workspace/*/; do
+            if [ ! -f "${dir}service.yaml" ]; then
+              continue
+            fi
+
+            SVC=$(basename "${dir}")
+            FOUND=$((FOUND + 1))
+
+            echo ""
+            echo "---- 部署服务: ${SVC} ----"
+
+            ARGS="--service-dir ${dir} --tag ${IMAGE_TAG}"
+            if [ "${BUILD_ONLY}" = "true" ]; then
+              ARGS="${ARGS} --build-only"
+            fi
+
+            if bash "${DEPLOY_SCRIPT}" ${ARGS}; then
+              echo "[OK] 服务 ${SVC} 部署成功"
+            else
+              echo "[FAIL] 服务 ${SVC} 部署失败"
+              # 继续部署其他服务，最后汇总
+            fi
+          done
+
+          if [ ${FOUND} -eq 0 ]; then
+            echo "[WARN] 未找到任何可部署的服务"
+            echo "  在 workspace/ 下的服务目录中创建 service.yaml 即可"
+            echo "  模板: cp cicd/service-deploy/service.yaml.example workspace/<service-name>/service.yaml"
+          fi
+
+      - name: 输出部署摘要
+        if: always()
+        run: |
+          echo "========================================"
+          echo "  部署完成"
+          echo "========================================"
+          echo ""
+          echo "查看已部署的服务:"
+          echo "  docker ps --filter 'name=devpilot-'"
+          echo ""
+          echo "查看服务日志:"
+          echo "  docker logs -f devpilot-<service-name>"
+
+      - name: 更新 Docker 缓存
+        if: always()
+        run: |
+          # 将本次构建产生的新缓存层移入缓存目录，供下次构建复用
+          if [ -d "/tmp/.buildx-cache-new" ]; then
+            rm -rf /tmp/.buildx-cache
+            mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+            echo "[OK] Docker Buildx 缓存已更新"
+          else
+            echo "[SKIP] 未产生新的构建缓存，跳过更新"
+          fi
+
+  # ============================================================
+  # 任务 2：通知（可选，通过飞书 Webhook）
+  # ============================================================
+  notify:
+    name: 飞书通知
+    needs: deploy-services
+    if: always() && vars.FEISHU_DEPLOY_WEBHOOK != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: 发送飞书通知
+        run: |
+          #!/bin/bash
+          STATUS=$(echo "${{ needs.deploy-services.result }}" | tr '[:lower:]' '[:upper:]')
+          COLOR="red"
+          [ "${STATUS}" = "SUCCESS" ] && COLOR="green"
+
+          SERVICE_NAME="${{ github.event.inputs.service_name || '全部服务' }}"
+          IMAGE_TAG="${IMAGE_TAG:-latest}"
+
+          cat > payload.json << EOF
+          {
+            "msg_type": "interactive",
+            "card": {
+              "header": {
+                "title": { "tag": "plain_text", "content": "DevPilot 服务部署${STATUS}" },
+                "template": "${COLOR}"
+              },
+              "elements": [
+                { "tag": "div", "text": { "tag": "lark_md", "content": "**服务:** ${SERVICE_NAME}\n**标签:** ${IMAGE_TAG}\n**状态:** ${STATUS}\n**触发:** ${{ github.event_name }}\n**提交:** ${{ github.sha }}" } }
+              ]
+            }
+          }
+          EOF
+
+          curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -d @payload.json \
+            "${{ vars.FEISHU_DEPLOY_WEBHOOK }}" || true

@@ -1,0 +1,50 @@
+{{/*
+DevPilot Helm Chart - Ingress（可选）
+通过 Ingress 对外暴露 OpenClaw 和 CC-Switch Web UI
+启用方式：在 values.yaml 中设置 ingress.enabled: true
+*/}}
+{{- if .Values.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "devpilot.name" . }}-ingress
+  namespace: {{ include "devpilot.namespace" . }}
+  labels:
+    {{- include "devpilot.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.openclawHost | quote }}
+        - {{ .Values.ingress.ccSwitchHost | quote }}
+      secretName: {{ .Values.ingress.tls.secretName | quote }}
+  {{- end }}
+  rules:
+    # ---- OpenClaw Gateway 路由 ----
+    - host: {{ .Values.ingress.openclawHost | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "devpilot.openclaw.fullname" . }}
+                port:
+                  number: {{ .Values.openclaw.gatewayPort }}
+    # ---- CC-Switch Web UI 路由 ----
+    - host: {{ .Values.ingress.ccSwitchHost | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "devpilot.ccSwitchClaude.fullname" . }}
+                port:
+                  number: {{ .Values.ccSwitchClaude.webPort }}
+{{- end -}}

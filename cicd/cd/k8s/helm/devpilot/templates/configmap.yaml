@@ -1,0 +1,105 @@
+{{/*
+DevPilot Helm Chart - ConfigMap（非敏感配置）
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "devpilot.name" . }}-config
+  namespace: {{ include "devpilot.namespace" . }}
+  labels:
+    {{- include "devpilot.labels" . | nindent 4 }}
+data:
+  # ---- agnes-ai 大模型配置 ----
+  AGNES_BASE_URL: {{ .Values.agnes.baseUrl | quote }}
+  AGNES_MODEL_FLASH: {{ .Values.agnes.modelFlash | quote }}
+  AGNES_MODEL_IMAGE: {{ .Values.agnes.modelImage | quote }}
+  AGNES_MODEL_VIDEO: {{ .Values.agnes.modelVideo | quote }}
+
+  # ---- OpenClaw 配置 ----
+  OPENCLAW_GATEWAY_PORT: {{ .Values.openclaw.gatewayPort | quote }}
+  OPENCLAW_VERSION: {{ .Values.openclaw.version | quote }}
+
+  # ---- CC-Switch + Claude Code 配置 ----
+  CC_SWITCH_VERSION: {{ .Values.ccSwitchClaude.ccSwitchVersion | quote }}
+  CC_SWITCH_WEB_PORT: {{ .Values.ccSwitchClaude.webPort | quote }}
+  CLAUDE_CODE_VERSION: {{ .Values.ccSwitchClaude.claudeCodeVersion | quote }}
+  DEVPILOT_AUTO_DEPLOY: {{ .Values.ccSwitchClaude.autoDeploy | quote }}
+
+  # ---- Redis 配置 ----
+  REDIS_PORT: {{ .Values.redis.port | quote }}
+
+  # ---- 通用配置 ----
+  NODE_IMAGE_TAG: {{ .Values.nodeImageTag | quote }}
+  TZ: {{ .Values.global.tz | quote }}
+
+  # ---- Redis 配置文件内容 ----
+  redis.conf: |
+    # Redis 配置文件（Helm Chart 生成）
+    bind 0.0.0.0
+    protected-mode yes
+    port {{ .Values.redis.port }}
+    timeout 0
+    tcp-keepalive 300
+    loglevel notice
+    logfile ""
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+    save 900 1
+    save 300 10
+    save 60 10000
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    dbfilename dump.rdb
+    dir /data
+    maxmemory {{ .Values.redis.maxmemory }}
+    maxmemory-policy {{ .Values.redis.maxmemoryPolicy }}
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+    client-output-buffer-limit normal 0 0 0
+    client-output-buffer-limit replica 256mb 64mb 60
+    client-output-buffer-limit pubsub 32mb 8mb 60
+
+  # ---- OpenClaw 配置模板 ----
+  openclaw.default.json: |
+    {
+      "version": "0.0.1",
+      "language": "zh-CN",
+      "ai": {
+        "provider": "agnes",
+        "providers": {
+          "agnes": {
+            "type": "openai",
+            "baseUrl": "{{ .Values.agnes.baseUrl }}",
+            "apiKey": "{{AGNES_API_KEY}}",
+            "api": "openai-completions",
+            "models": [
+              {"name": "{{ .Values.agnes.modelFlash }}", "contextWindow": 256000, "maxTokens": 8192},
+              {"name": "{{ .Values.agnes.modelImage }}", "contextWindow": 4096, "maxTokens": 4096},
+              {"name": "{{ .Values.agnes.modelVideo }}", "contextWindow": 4096, "maxTokens": 4096}
+            ]
+          }
+        },
+        "defaultModel": "agnes/{{ .Values.agnes.modelFlash }}"
+      },
+      "gateway": {
+        "enabled": true,
+        "token": "{{OPENCLAW_GATEWAY_TOKEN}}",
+        "deviceAuth": false,
+        "port": {{ .Values.openclaw.gatewayPort }}
+      },
+      "channels": {
+        "feishu": {
+          "enabled": true,
+          "appId": "{{FEISHU_APP_ID}}",
+          "appSecret": "{{FEISHU_APP_SECRET}}"
+        }
+      },
+      "redis": {
+        "url": "redis://default:{{REDIS_PASSWORD}}@{{ include "devpilot.redis.fullname" . }}:{{ .Values.redis.port }}"
+      }
+    }

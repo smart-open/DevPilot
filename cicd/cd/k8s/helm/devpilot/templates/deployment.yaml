@@ -1,0 +1,485 @@
+{{/*
+DevPilot Helm Chart - Deployments
+包含 Redis、OpenClaw、CC-Switch+Claude Code 三个 Deployment
+*/}}
+
+# ============================================================
+# Redis Deployment + PVC
+# ============================================================
+{{- if .Values.redis.persistence.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "devpilot.redis.fullname" . }}-pvc
+  namespace: {{ include "devpilot.namespace" . }}
+  labels:
+    {{- include "devpilot.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with .Values.redis.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.redis.persistence.size | quote }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "devpilot.redis.fullname" . }}
+  namespace: {{ include "devpilot.namespace" . }}
+  labels:
+    {{- include "devpilot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "devpilot.redis.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "devpilot.redis.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command:
+            - sh
+            - -c
+            - >-
+              redis-server /usr/local/etc/redis/redis.conf
+              --requirepass "$(REDIS_PASSWORD)"
+          ports:
+            - containerPort: {{ .Values.redis.port }}
+              name: redis
+          env:
+            - name: TZ
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "devpilot.name" . }}-config
+                  key: TZ
+            - name: REDIS_PASSWORD
+              {{- if .Values.externalSecret.enabled }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: REDIS_PASSWORD
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "devpilot.name" . }}-secrets
+                  key: REDIS_PASSWORD
+              {{- end }}
+          volumeMounts:
+            - name: redis-config
+              mountPath: /usr/local/etc/redis/redis.conf
+              subPath: redis.conf
+              readOnly: true
+            {{- if .Values.redis.persistence.enabled }}
+            - name: redis-data
+              mountPath: /data
+            {{- end }}
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "redis-cli -a $(REDIS_PASSWORD) ping | grep PONG"
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "redis-cli -a $(REDIS_PASSWORD) ping | grep PONG"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+      volumes:
+        - name: redis-config
+          configMap:
+            name: {{ include "devpilot.name" . }}-config
+            items:
+              - key: redis.conf
+                path: redis.conf
+        {{- if .Values.redis.persistence.enabled }}
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: {{ include "devpilot.redis.fullname" . }}-pvc
+        {{- end }}
+
+---
+# ============================================================
+# OpenClaw Deployment + PVC
+# ============================================================
+{{- if .Values.openclaw.persistence.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "devpilot.openclaw.fullname" . }}-pvc
+  namespace: {{ include "devpilot.namespace" . }}
+  labels:
+    {{- include "devpilot.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with .Values.openclaw.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.openclaw.persistence.size | quote }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "devpilot.openclaw.fullname" . }}
+  namespace: {{ include "devpilot.namespace" . }}
+  labels:
+    {{- include "devpilot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "devpilot.openclaw.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "devpilot.openclaw.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: wait-for-redis
+          image: {{ .Values.redis.image | quote }}
+          command:
+            - sh
+            - -c
+            - >-
+              until redis-cli -h {{ include "devpilot.redis.fullname" . }} -a "$(REDIS_PASSWORD)" ping | grep PONG;
+              do echo "等待 Redis 就绪 ..."; sleep 3; done;
+              echo "Redis 已就绪"
+          env:
+            - name: REDIS_PASSWORD
+              {{- if .Values.externalSecret.enabled }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: REDIS_PASSWORD
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "devpilot.name" . }}-secrets
+                  key: REDIS_PASSWORD
+              {{- end }}
+      containers:
+        - name: openclaw
+          image: {{ .Values.openclaw.image | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.openclaw.gatewayPort }}
+              name: gateway
+          env:
+            - name: TZ
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "devpilot.name" . }}-config
+                  key: TZ
+            - name: NODE_ENV
+              value: "production"
+            - name: AGNES_API_KEY
+              {{- if .Values.externalSecret.enabled }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: AGNES_API_KEY
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "devpilot.name" . }}-secrets
+                  key: AGNES_API_KEY
+              {{- end }}
+            - name: AGNES_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "devpilot.name" . }}-config
+                  key: AGNES_BASE_URL
+            - name: OPENCLAW_GATEWAY_TOKEN
+              {{- if .Values.externalSecret.enabled }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: OPENCLAW_GATEWAY_TOKEN
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "devpilot.name" . }}-secrets
+                  key: OPENCLAW_GATEWAY_TOKEN
+              {{- end }}
+            - name: OPENCLAW_GATEWAY_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "devpilot.name" . }}-config
+                  key: OPENCLAW_GATEWAY_PORT
+            - name: FEISHU_APP_ID
+              {{- if .Values.externalSecret.enabled }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: FEISHU_APP_ID
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "devpilot.name" . }}-secrets
+                  key: FEISHU_APP_ID
+              {{- end }}
+            - name: FEISHU_APP_SECRET
+              {{- if .Values.externalSecret.enabled }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: FEISHU_APP_SECRET
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "devpilot.name" . }}-secrets
+                  key: FEISHU_APP_SECRET
+              {{- end }}
+            - name: REDIS_PASSWORD
+              {{- if .Values.externalSecret.enabled }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: REDIS_PASSWORD
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "devpilot.name" . }}-secrets
+                  key: REDIS_PASSWORD
+              {{- end }}
+          volumeMounts:
+            - name: openclaw-config-template
+              mountPath: /app/conf/openclaw.default.json
+              subPath: openclaw.default.json
+              readOnly: true
+            {{- if .Values.openclaw.persistence.enabled }}
+            - name: openclaw-data
+              mountPath: /data/openclaw
+            {{- end }}
+          resources:
+            {{- toYaml .Values.openclaw.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: gateway
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: gateway
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: openclaw-config-template
+          configMap:
+            name: {{ include "devpilot.name" . }}-config
+            items:
+              - key: openclaw.default.json
+                path: openclaw.default.json
+        {{- if .Values.openclaw.persistence.enabled }}
+        - name: openclaw-data
+          persistentVolumeClaim:
+            claimName: {{ include "devpilot.openclaw.fullname" . }}-pvc
+        {{- end }}
+
+---
+# ============================================================
+# CC-Switch + Claude Code Deployment + PVC
+# ============================================================
+{{- if .Values.ccSwitchClaude.workspacePersistence.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "devpilot.ccSwitchClaude.fullname" . }}-workspace-pvc
+  namespace: {{ include "devpilot.namespace" . }}
+  labels:
+    {{- include "devpilot.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with .Values.ccSwitchClaude.workspacePersistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.ccSwitchClaude.workspacePersistence.size | quote }}
+---
+{{- end }}
+{{- if .Values.ccSwitchClaude.configPersistence.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "devpilot.ccSwitchClaude.fullname" . }}-config-pvc
+  namespace: {{ include "devpilot.namespace" . }}
+  labels:
+    {{- include "devpilot.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with .Values.ccSwitchClaude.configPersistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.ccSwitchClaude.configPersistence.size | quote }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "devpilot.ccSwitchClaude.fullname" . }}
+  namespace: {{ include "devpilot.namespace" . }}
+  labels:
+    {{- include "devpilot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: coding
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "devpilot.ccSwitchClaude.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "devpilot.ccSwitchClaude.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: cc-switch-claude
+          image: {{ .Values.ccSwitchClaude.image | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          {{- if .Values.ccSwitchClaude.interactive }}
+          stdin: true
+          tty: true
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.ccSwitchClaude.webPort }}
+              name: web
+          env:
+            - name: TZ
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "devpilot.name" . }}-config
+                  key: TZ
+            - name: HOME
+              value: "/home/node"
+            - name: PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "devpilot.name" . }}-config
+                  key: CC_SWITCH_WEB_PORT
+            - name: HOST
+              value: "0.0.0.0"
+            - name: ANTHROPIC_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "devpilot.name" . }}-config
+                  key: AGNES_BASE_URL
+            - name: ANTHROPIC_API_KEY
+              {{- if .Values.externalSecret.enabled }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: AGNES_API_KEY
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "devpilot.name" . }}-secrets
+                  key: AGNES_API_KEY
+              {{- end }}
+            - name: ANTHROPIC_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "devpilot.name" . }}-config
+                  key: AGNES_MODEL_FLASH
+            - name: AGNES_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "devpilot.name" . }}-config
+                  key: AGNES_BASE_URL
+            - name: AGNES_API_KEY
+              {{- if .Values.externalSecret.enabled }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: AGNES_API_KEY
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "devpilot.name" . }}-secrets
+                  key: AGNES_API_KEY
+              {{- end }}
+            - name: DEVPILOT_AUTO_DEPLOY
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "devpilot.name" . }}-config
+                  key: DEVPILOT_AUTO_DEPLOY
+          volumeMounts:
+            {{- if .Values.ccSwitchClaude.workspacePersistence.enabled }}
+            - name: workspace
+              mountPath: /workspace
+            {{- end }}
+            {{- if .Values.ccSwitchClaude.configPersistence.enabled }}
+            - name: cc-switch-data
+              mountPath: /home/node
+            {{- end }}
+          resources:
+            {{- toYaml .Values.ccSwitchClaude.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: web
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: web
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        {{- if .Values.ccSwitchClaude.workspacePersistence.enabled }}
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: {{ include "devpilot.ccSwitchClaude.fullname" . }}-workspace-pvc
+        {{- end }}
+        {{- if .Values.ccSwitchClaude.configPersistence.enabled }}
+        - name: cc-switch-data
+          persistentVolumeClaim:
+            claimName: {{ include "devpilot.ccSwitchClaude.fullname" . }}-config-pvc
+        {{- end }}

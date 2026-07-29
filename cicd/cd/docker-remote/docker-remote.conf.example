@@ -1,0 +1,67 @@
+# ============================================================
+# DevPilot - 远程 Docker 部署配置示例
+# 复制为 docker-remote.conf 并填入实际值
+# ============================================================
+
+# ---- DOCKER_HOST 连接方式 ----
+# 方式 1：TCP 明文连接（仅限内网/信任网络，远程 Docker 需开启 -H tcp://0.0.0.0:2375）
+# REMOTE_DOCKER_HOST=tcp://remote-server:2375
+
+# 方式 2：SSH 连接（推荐，需配置 SSH 免密登录）
+# REMOTE_DOCKER_HOST=ssh://user@remote-server
+
+# 也可以直接设置 DOCKER_HOST 环境变量（优先级高于此配置文件）
+# export DOCKER_HOST=ssh://user@remote-server
+
+
+# ---- SSH 隧道模式配置（配合 --ssh-tunnel 参数使用）----
+# SSH 隧道模式会建立本地端口转发到远程 Docker API
+# 适用于远程 Docker 仅监听 127.0.0.1:2375 的场景
+
+# 远程 SSH 用户名
+REMOTE_SSH_USER=root
+
+# 远程 SSH 主机地址（IP 或域名）
+REMOTE_SSH_HOST=192.168.1.100
+
+# 远程 SSH 端口
+REMOTE_SSH_PORT=22
+
+# 远程 Docker API 端口（通常为 2375）
+REMOTE_DOCKER_PORT=2375
+
+# 本地转发端口（本地监听端口）
+LOCAL_FORWARD_PORT=23750
+
+
+# ---- 使用示例 ----
+# 1. TCP 明文模式：
+#    ./deploy-remote.sh --host tcp://192.168.1.100:2375
+#
+# 2. SSH 直连模式（推荐）：
+#    ./deploy-remote.sh --host ssh://root@192.168.1.100
+#
+# 3. SSH 隧道模式（远程 Docker 仅本地监听时）：
+#    先配置本文件的 REMOTE_SSH_HOST 等参数
+#    ./deploy-remote.sh --ssh-tunnel
+#
+# 4. 使用 docker run 模式（不依赖 compose）：
+#    ./deploy-remote.sh --host ssh://root@192.168.1.100 --run
+
+
+# ---- 远程 Docker 配置要求 ----
+# 1. 远程主机已安装 Docker Engine 24+
+# 2. TCP 模式：远程 Docker 需配置监听 0.0.0.0:2375
+#    编辑 /etc/docker/daemon.json 添加：
+#    { "hosts": ["fd://", "tcp://0.0.0.0:2375"] }
+#    或修改 systemd 服务配置
+#
+# 3. SSH 模式：本地需配置 SSH 免密登录
+#    ssh-keygen -t ed25519
+#    ssh-copy-id root@192.168.1.100
+#
+# 4. SSH 隧道模式：远程 Docker 需监听 127.0.0.1:2375
+#    编辑 /etc/docker/daemon.json：
+#    { "hosts": ["fd://", "tcp://127.0.0.1:2375"] }
+#
+# 5. 防火墙：开放对应端口（2375 TCP 模式 / OpenClaw 端口 / CC-Switch 端口）
