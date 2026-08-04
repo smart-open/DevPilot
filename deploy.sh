@@ -3,162 +3,272 @@ set -e
 
 # ============================================================
 # DevPilot 一键部署脚本
-# 功能：环境检查、目录创建、配置验证、构建启动、健康检查
+# 功能：环境检查、配置生成、构建启动、健康检查
 # 用法: ./deploy.sh
+# 依赖：cicd/lib/common.sh（公共函数库）
+# 日志：输出到控制台 + logs/deploy-YYYYMMDD-HHMMSS.log
 # ============================================================
 
-# ---- 颜色 ----
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-# ---- 项目根目录 ----
+# ---- 加载公共函数库 ----
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/cicd/lib/common.sh"
 cd "${SCRIPT_DIR}"
 
-info()  { printf "${BLUE}[INFO]${NC}  %s\n" "$1"; }
-ok()    { printf "${GREEN}[OK]${NC}    %s\n" "$1"; }
-warn()  { printf "${YELLOW}[WARN]${NC}  %s\n" "$1"; }
-err()   { printf "${RED}[ERROR]${NC} %s\n" "$1"; }
+# ---- 日志文件设置 ----
+LOG_DIR="${SCRIPT_DIR}/logs"
+mkdir -p "${LOG_DIR}"
+LOG_FILE="${LOG_DIR}/deploy-$(date +%Y%m%d-%H%M%S).log"
 
-echo "========================================"
-echo "  DevPilot 一键部署"
-echo "========================================"
-echo ""
+# ---- 增强日志函数（带时间戳 + 双输出到控制台和日志文件） ----
+_log() {
+    local level="$1"; shift
+    local msg="$*"
+    local ts; ts="$(date '+%Y-%m-%d %H:%M:%S')"
+    local color=""
+    case "${level}" in
+        INFO)   color="${BLUE}" ;;
+        OK)     color="${GREEN}" ;;
+        WARN)   color="${YELLOW}" ;;
+        ERROR)  color="${RED}" ;;
+        DETAIL) color="${CYAN}" ;;
+    esac
+    # 控制台输出（带颜色）
+    echo -e "${color}[${ts}] [${level}]${NC} ${msg}"
+    # 日志文件输出（无颜色码）
+    echo "[${ts}] [${level}] ${msg}" >> "${LOG_FILE}"
+}
+
+# 覆盖 common.sh 的函数，增加时间戳和日志文件输出
+info()    { _log "INFO" "$*"; }
+success() { _log "OK" "$*"; }
+warn()    { _log "WARN" "$*"; }
+error()   { _log "ERROR" "$*" >&2; }
+
+# 子步骤日志
+detail()  { _log "DETAIL" "  $*"; }
+
+# 步骤计时
+STEP_START=0
+step_begin() {
+    local num="$1"; local name="$2"
+    echo "" >> "${LOG_FILE}"
+    echo "========== 步骤 ${num}: ${name} ==========" >> "${LOG_FILE}"
+    info "步骤 ${num}/7: ${name}"
+    STEP_START=$SECONDS
+}
+
+step_end() {
+    local elapsed=$((SECONDS - STEP_START))
+    success "步骤完成（耗时 ${elapsed}s）"
+    echo ""
+}
+
+# 敏感信息掩码
+mask_secret() {
+    local val="$1"
+    if [ ${#val} -le 8 ]; then
+        echo "****"
+    else
+        echo "${val:0:4}****${val: -4}"
+    fi
+}
 
 # ============================================================
-# 1. 环境检查
+# 启动
 # ============================================================
-info "检查运行环境..."
+echo "========================================" | tee -a "${LOG_FILE}"
+echo "  DevPilot 一键部署" | tee -a "${LOG_FILE}"
+echo "  时间: $(date '+%Y-%m-%d %H:%M:%S')" | tee -a "${LOG_FILE}"
+echo "  日志: ${LOG_FILE}" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
+echo "" | tee -a "${LOG_FILE}"
+
+# ============================================================
+# 步骤 1: 环境检查
+# ============================================================
+step_begin 1 "环境检查"
 
 # Docker
+detail "检查 Docker..."
 if ! command -v docker &>/dev/null; then
-    err "Docker 未安装，请先安装 Docker Engine 24.0+"
-    err "安装指南: https://docs.docker.com/engine/install/"
+    error "Docker 未安装，请先安装 Docker Engine 24.0+"
+    error "安装指南: https://docs.docker.com/engine/install/"
     exit 1
 fi
-DOCKER_VERSION=$(docker --version | grep -oP 'Docker version \K[0-9]+\.[0-9]+')
-ok "Docker 版本: $(docker --version | awk '{print $3}' | tr -d ',')"
+DOCKER_VER=$(docker --version | awk '{print $3}' | tr -d ',')
+success "Docker 版本: ${DOCKER_VER}"
+detail "Docker 路径: $(command -v docker)"
 
 # Docker Compose
+detail "检查 Docker Compose..."
 if ! docker compose version &>/dev/null; then
-    err "Docker Compose v2 未安装"
-    err "请安装 Docker Compose v2.20+"
+    error "Docker Compose v2 未安装，请安装 Docker Compose v2.20+"
     exit 1
 fi
-ok "Docker Compose: $(docker compose version --short)"
+COMPOSE_VER=$(docker compose version --short)
+success "Docker Compose: ${COMPOSE_VER}"
 
 # Docker 守护进程
+detail "检查 Docker 守护进程..."
 if ! docker info &>/dev/null; then
-    err "Docker 守护进程未运行，请启动 Docker"
+    error "Docker 守护进程未运行，请启动 Docker"
     exit 1
 fi
-ok "Docker 守护进程运行中"
+success "Docker 守护进程运行中"
+
+# 系统资源
+detail "检查系统资源..."
+MEM_TOTAL=$(free -m 2>/dev/null | awk '/^Mem:/{print $2}' || echo "unknown")
+MEM_AVAIL=$(free -m 2>/dev/null | awk '/^Mem:/{print $7}' || echo "unknown")
+DISK_AVAIL=$(df -m . 2>/dev/null | awk 'NR==2{print $4}' || echo "unknown")
+detail "内存: 总计 ${MEM_TOTAL}MB, 可用 ${MEM_AVAIL}MB"
+detail "磁盘: 可用 ${DISK_AVAIL}MB"
+
+if [ "${MEM_AVAIL}" != "unknown" ] && [ "${MEM_AVAIL}" -lt 2048 ]; then
+    warn "可用内存不足 2GB（当前 ${MEM_AVAIL}MB），可能导致 OOM"
+fi
+if [ "${DISK_AVAIL}" != "unknown" ] && [ "${DISK_AVAIL}" -lt 5120 ]; then
+    warn "可用磁盘不足 5GB（当前 ${DISK_AVAIL}MB），可能导致构建失败"
+fi
+
+# Docker 磁盘使用
+DOCKER_DISK=$(docker system df --format '{{.Size}}' 2>/dev/null | head -1 || echo "unknown")
+detail "Docker 磁盘占用: ${DOCKER_DISK}"
 
 # Make (可选)
 if command -v make &>/dev/null; then
-    ok "Make 已安装（可用 make 命令）"
+    success "Make 已安装（可用 make 命令）"
 else
     warn "Make 未安装（可选，安装后可用 make 命令快捷操作）"
 fi
 
-echo ""
+# 网络端口检查
+detail "检查端口占用..."
+GATEWAY_PORT_CHECK=$(grep "^OPENCLAW_GATEWAY_PORT=" .env 2>/dev/null | cut -d'=' -f2 || echo "18789")
+WEB_PORT_CHECK=$(grep "^CC_SWITCH_WEB_PORT=" .env 2>/dev/null | cut -d'=' -f2 || echo "8890")
+for port in "${GATEWAY_PORT_CHECK}" "${WEB_PORT_CHECK}"; do
+    if command -v ss &>/dev/null; then
+        if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+            warn "端口 ${port} 已被占用"
+        else
+            detail "端口 ${port} 可用"
+        fi
+    fi
+done
+
+step_end
 
 # ============================================================
-# 2. 创建必要目录
+# 步骤 2: 创建数据目录
 # ============================================================
-info "创建数据目录..."
+step_begin 2 "创建数据目录"
 
+detail "创建 data/ 目录..."
 mkdir -p data/redis data/openclaw data/cc-switch-claude
-mkdir -p logs/redis logs/openclaw logs/cc-switch-claude
-mkdir -p workspace
-mkdir -p backups
+detail "  data/redis/         - Redis 持久化"
+detail "  data/openclaw/      - OpenClaw 配置"
+detail "  data/cc-switch-claude/ - CC-Switch 数据"
 
-# workspace 目录添加 .gitkeep
+detail "创建 logs/ 目录..."
+mkdir -p logs/redis logs/openclaw logs/cc-switch-claude
+detail "  logs/redis/          - Redis 日志"
+detail "  logs/openclaw/       - OpenClaw 日志"
+detail "  logs/cc-switch-claude/ - CC-Switch 日志"
+
+detail "创建 workspace/ 目录..."
+mkdir -p workspace
 touch workspace/.gitkeep
 
-ok "目录结构已创建"
+success "目录结构已创建"
 
-echo ""
+step_end
 
 # ============================================================
-# 3. 检查 .env 文件
+# 步骤 3: 检查 .env 配置
 # ============================================================
-info "检查环境变量配置..."
+step_begin 3 "检查环境变量配置"
 
 if [ ! -f ".env" ]; then
-    # 尝试使用配置向导
     if [ -f "./init.sh" ]; then
         warn ".env 文件不存在，启动配置向导..."
         echo ""
         bash ./init.sh
-        # 向导执行后如果 .env 仍不存在，退出
         if [ ! -f ".env" ]; then
-            err "配置未完成，请重新运行 ./deploy.sh"
+            error "配置未完成，请重新运行 ./deploy.sh"
             exit 1
         fi
     elif [ -f ".env.example" ]; then
         warn ".env 文件不存在，从模板创建..."
         cp .env.example .env
-        # 自动生成密码
-        AUTO_REDIS_PASS=$(openssl rand -hex 16 2>/dev/null || head -c 32 /dev/urandom | xxd -p | tr -d '\n')
-        AUTO_TOKEN=$(openssl rand -hex 16 2>/dev/null || head -c 32 /dev/urandom | xxd -p | tr -d '\n')
+        AUTO_REDIS_PASS=$(gen_password 32)
+        AUTO_TOKEN=$(gen_password 32)
         sed -i.bak \
             -e "s|REDIS_PASSWORD=change-me-to-strong-password|REDIS_PASSWORD=${AUTO_REDIS_PASS}|" \
             -e "s|OPENCLAW_GATEWAY_TOKEN=change-me-to-secure-token|OPENCLAW_GATEWAY_TOKEN=${AUTO_TOKEN}|" \
             .env
         rm -f .env.bak
-        ok "已自动生成 Redis 密码和 Gateway Token"
+        success "已自动生成 Redis 密码和 Gateway Token"
         warn "请编辑 .env 文件填入 agnes-ai API Key 和飞书凭证"
         echo ""
         echo "  vim .env"
         echo ""
         exit 0
     else
-        err ".env 文件、init.sh 和 .env.example 都不存在"
+        error ".env 文件、init.sh 和 .env.example 都不存在"
         exit 1
     fi
 fi
 
-# 检查必需的环境变量
+# 加载版本配置
+if [ -f "versions.env" ]; then
+    detail "加载 versions.env..."
+    source versions.env
+    detail "  Node.js:       ${NODE_IMAGE_TAG}"
+    detail "  OpenClaw:      ${OPENCLAW_VERSION}"
+    detail "  CC-Switch:     ${CC_SWITCH_VERSION}"
+    detail "  Claude Code:   ${CLAUDE_CODE_VERSION}"
+fi
+
+# 逐项检查环境变量（敏感信息掩码）
+detail "检查环境变量..."
+
+check_env_var() {
+    local var_name="$1"
+    local var_desc="$2"
+    local is_secret="$3"
+    local var_value
+    var_value=$(grep "^${var_name}=" .env 2>/dev/null | cut -d'=' -f2-)
+
+    if [ -z "${var_value}" ]; then
+        error "${var_desc} 未配置（${var_name}）"
+        return 1
+    elif echo "${var_value}" | grep -qE "your-|change-me"; then
+        error "${var_desc} 仍为占位符（${var_name}=${var_value}）"
+        return 1
+    else
+        if [ "${is_secret}" = "secret" ]; then
+            detail "  ${var_name} = $(mask_secret "${var_value}")"
+        else
+            detail "  ${var_name} = ${var_value}"
+        fi
+        return 0
+    fi
+}
+
 ENV_ERRORS=0
-check_env() {
-    local var_name="$1"
-    local var_desc="$2"
-    local var_value=$(grep "^${var_name}=" .env 2>/dev/null | cut -d'=' -f2-)
-    if [ -z "${var_value}" ] || [ "${var_value}" = "your-agnes-api-key" ] || [ "${var_value}" = "your-feishu-app-id" ] || [ "${var_value}" = "your-feishu-app-secret" ] || [ "${var_value}" = "change-me-to-strong-password" ] || [ "${var_value}" = "change-me-to-secure-token" ]; then
-        err "${var_desc} 未配置（${var_name}）"
-        ENV_ERRORS=$((ENV_ERRORS + 1))
-    fi
-}
-
-check_env "AGNES_API_KEY"          "agnes-ai API Key"
-check_env "AGNES_BASE_URL"         "agnes-ai API 地址"
-check_env "FEISHU_APP_ID"          "飞书 App ID"
-check_env "FEISHU_APP_SECRET"      "飞书 App Secret"
-
-# 密码类：如果仍是占位符，自动生成
-auto_fix_password() {
-    local var_name="$1"
-    local var_desc="$2"
-    local var_value=$(grep "^${var_name}=" .env 2>/dev/null | cut -d'=' -f2-)
-    if [ -z "${var_value}" ] || [ "${var_value}" = "change-me-to-strong-password" ] || [ "${var_value}" = "change-me-to-secure-token" ]; then
-        local new_pass=$(openssl rand -hex 16 2>/dev/null || head -c 32 /dev/urandom | xxd -p | tr -d '\n')
-        sed -i.bak "s|^${var_name}=.*|${var_name}=${new_pass}|" .env
-        rm -f .env.bak
-        ok "已自动生成 ${var_desc}"
-    fi
-}
-
-auto_fix_password "REDIS_PASSWORD"         "Redis 密码"
-auto_fix_password "OPENCLAW_GATEWAY_TOKEN" "OpenClaw Gateway Token"
+check_env_var "AGNES_API_KEY"          "agnes-ai API Key"     "secret" || ENV_ERRORS=$((ENV_ERRORS + 1))
+check_env_var "AGNES_BASE_URL"         "agnes-ai API 地址"     ""       || ENV_ERRORS=$((ENV_ERRORS + 1))
+check_env_var "FEISHU_APP_ID"          "飞书 App ID"          ""       || ENV_ERRORS=$((ENV_ERRORS + 1))
+check_env_var "FEISHU_APP_SECRET"      "飞书 App Secret"      "secret" || ENV_ERRORS=$((ENV_ERRORS + 1))
+check_env_var "REDIS_PASSWORD"         "Redis 密码"           "secret" || ENV_ERRORS=$((ENV_ERRORS + 1))
+check_env_var "OPENCLAW_GATEWAY_TOKEN" "Gateway Token"        "secret" || ENV_ERRORS=$((ENV_ERRORS + 1))
+check_env_var "OPENCLAW_GATEWAY_PORT"  "Gateway 端口"         ""       || ENV_ERRORS=$((ENV_ERRORS + 1))
+check_env_var "CC_SWITCH_WEB_PORT"     "CC-Switch Web 端口"   ""       || ENV_ERRORS=$((ENV_ERRORS + 1))
+check_env_var "TZ"                     "时区"                 ""       || ENV_ERRORS=$((ENV_ERRORS + 1))
 
 if [ ${ENV_ERRORS} -gt 0 ]; then
     echo ""
-    err "有 ${ENV_ERRORS} 个必需变量未配置，请编辑 .env 文件"
+    error "有 ${ENV_ERRORS} 个变量未配置或仍为占位符"
     echo ""
     echo "  vim .env"
     echo "  或运行配置向导: ./init.sh"
@@ -166,101 +276,147 @@ if [ ${ENV_ERRORS} -gt 0 ]; then
     exit 1
 fi
 
-ok ".env 配置检查通过"
+success ".env 配置检查通过（${ENV_ERRORS} 个错误）"
 
-echo ""
+step_end
 
 # ============================================================
-# 4. 构建并启动
+# 步骤 4: 构建镜像
 # ============================================================
-info "构建并启动服务（首次构建需 5-10 分钟）..."
+step_begin 4 "构建 Docker 镜像"
+
+detail "构建配置:"
+detail "  OpenClaw Dockerfile:    dockerfiles/openclaw/Dockerfile"
+detail "  CC-Switch Dockerfile:   dockerfiles/cc-switch-claude/Dockerfile"
+detail "  构建上下文:             ${SCRIPT_DIR}"
+detail "  .dockerignore:          已启用"
+
+info "开始构建镜像（首次构建需 5-10 分钟）..."
 echo ""
 
-docker compose up -d --build 2>&1 | while read line; do
+BUILD_START=$SECONDS
+docker compose up -d --build 2>&1 | while IFS= read -r line; do
     echo "  ${line}"
+    echo "${line}" >> "${LOG_FILE}"
+done
+BUILD_ELAPSED=$((SECONDS - BUILD_START))
+
+echo ""
+success "镜像构建完成（耗时 ${BUILD_ELAPSED}s）"
+
+# 记录镜像大小
+detail "镜像信息:"
+docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" 2>/dev/null | grep -E "devpilot|REPOSITORY" | while read -r line; do
+    detail "  ${line}"
 done
 
-echo ""
+step_end
 
 # ============================================================
-# 5. 等待健康检查
+# 步骤 5: 容器状态验证
 # ============================================================
-info "等待服务就绪..."
+step_begin 5 "容器状态验证"
 
+detail "检查容器运行状态..."
+docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null | while IFS= read -r line; do
+    detail "  ${line}"
+done
+
+# 逐容器检查
+for container in devpilot-redis devpilot-openclaw devpilot-cc-switch-claude; do
+    detail "检查容器: ${container}"
+    if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
+        local_status=$(docker inspect --format '{{.State.Status}}' "${container}" 2>/dev/null)
+        local_health=$(docker inspect --format '{{.State.Health.Status}}' "${container}" 2>/dev/null || echo "none")
+        detail "  状态: ${local_status}, 健康检查: ${local_health}"
+        success "容器运行中: ${container}"
+    else
+        error "容器未运行: ${container}"
+        detail "  最后 20 行日志:"
+        docker compose logs --tail 20 "${container/devpilot-/}" 2>/dev/null | head -20 | while read -r line; do
+            detail "    ${line}"
+        done
+    fi
+done
+
+# 端口绑定检查
+detail "检查端口绑定..."
 GATEWAY_PORT=$(grep "^OPENCLAW_GATEWAY_PORT=" .env | cut -d'=' -f2)
 WEB_PORT=$(grep "^CC_SWITCH_WEB_PORT=" .env | cut -d'=' -f2)
 REDIS_PASS=$(grep "^REDIS_PASSWORD=" .env | cut -d'=' -f2)
 
-MAX_WAIT=90
-WAITED=0
-
-# Redis
-while [ ${WAITED} -lt ${MAX_WAIT} ]; do
-    if docker compose exec -T redis redis-cli -a "${REDIS_PASS}" ping 2>/dev/null | grep -q PONG; then
-        ok "Redis 就绪"
-        break
+for port_info in "OpenClaw:${GATEWAY_PORT}" "CC-Switch:${WEB_PORT}"; do
+    name="${port_info%%:*}"
+    port="${port_info##*:}"
+    if command -v ss &>/dev/null; then
+        if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+            detail "  ${name} 端口 ${port} 已监听"
+        else
+            warn "  ${name} 端口 ${port} 未监听"
+        fi
     fi
-    sleep 2
-    WAITED=$((WAITED + 2))
 done
-if [ ${WAITED} -ge ${MAX_WAIT} ]; then
-    warn "Redis 未就绪（可能仍在初始化）"
-fi
 
-# OpenClaw
-WAITED=0
-while [ ${WAITED} -lt ${MAX_WAIT} ]; do
-    if curl -sf "http://localhost:${GATEWAY_PORT}/healthz" >/dev/null 2>&1; then
-        ok "OpenClaw 就绪"
-        break
-    fi
-    sleep 3
-    WAITED=$((WAITED + 3))
-done
-if [ ${WAITED} -ge ${MAX_WAIT} ]; then
-    warn "OpenClaw 未就绪（查看日志: docker compose logs openclaw）"
-fi
-
-# CC-Switch Web
-WAITED=0
-while [ ${WAITED} -lt ${MAX_WAIT} ]; do
-    if curl -sf "http://localhost:${WEB_PORT}" >/dev/null 2>&1; then
-        ok "CC-Switch Web 就绪"
-        break
-    fi
-    sleep 2
-    WAITED=$((WAITED + 2))
-done
-if [ ${WAITED} -ge ${MAX_WAIT} ]; then
-    warn "CC-Switch Web 未就绪（查看日志: docker compose logs cc-switch-claude）"
-fi
-
-echo ""
+step_end
 
 # ============================================================
-# 6. 打印状态
+# 步骤 6: 健康检查
 # ============================================================
-echo "========================================"
-ok "部署完成"
-echo "========================================"
+step_begin 6 "健康检查"
+
+detail "Redis 健康检查（最多 45 次重试，每 2s 一次）..."
+wait_for_redis "devpilot-redis" "${REDIS_PASS}" 45 || warn "Redis 未在预期时间内就绪"
+
+detail "OpenClaw 健康检查（最多 30 次重试，每 3s 一次）..."
+wait_for_http "OpenClaw" "http://localhost:${GATEWAY_PORT}/healthz" 30 3 || warn "OpenClaw 未在预期时间内就绪"
+
+detail "CC-Switch Web 健康检查（最多 45 次重试，每 2s 一次）..."
+wait_for_http "CC-Switch Web" "http://localhost:${WEB_PORT}" 45 2 || warn "CC-Switch 未在预期时间内就绪"
+
+step_end
+
+# ============================================================
+# 步骤 7: 部署总结
+# ============================================================
+step_begin 7 "部署总结"
+
+print_separator
+success "DevPilot 部署完成"
+print_separator
 echo ""
-echo "${CYAN}服务地址:${NC}"
+echo -e "${CYAN}服务地址:${NC}"
 echo "  Redis:        容器内部 :6379"
 echo "  OpenClaw:     http://localhost:${GATEWAY_PORT}"
 echo "  CC-Switch:    http://localhost:${WEB_PORT}"
 echo ""
-echo "${CYAN}常用命令:${NC}"
-echo "  进入 Claude Code:   docker compose exec cc-switch-claude claude"
+echo -e "${CYAN}常用命令:${NC}"
+echo "  启动 Claude Code:   docker compose exec cc-switch-claude claude"
 echo "  查看日志:          docker compose logs -f"
 echo "  查看状态:          docker compose ps"
 echo "  健康检查:          make health"
+echo "  一键启停:          ./service.sh start|stop|status"
 echo ""
-echo "${CYAN}飞书机器人:${NC}"
+echo -e "${CYAN}飞书机器人:${NC}"
 echo "  在飞书中搜索并添加你的机器人，发送消息即可获得 AI 回复"
 echo ""
-echo "${CYAN}CC-Switch 配置:${NC}"
+echo -e "${CYAN}CC-Switch 配置:${NC}"
 echo "  1. 浏览器打开 http://localhost:${WEB_PORT}"
 echo "  2. 添加 agnes-ai 供应商（API Key 在 .env 文件中）"
 echo "  3. 启用 Claude Code takeover"
 echo ""
+echo -e "${YELLOW}部署日志: ${LOG_FILE}${NC}"
+echo ""
 echo "========================================"
+
+# 记录到日志文件
+{
+    echo ""
+    echo "========== 部署总结 =========="
+    echo "时间: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "状态: 完成"
+    echo "OpenClaw:  http://localhost:${GATEWAY_PORT}"
+    echo "CC-Switch: http://localhost:${WEB_PORT}"
+    echo "日志文件:  ${LOG_FILE}"
+} >> "${LOG_FILE}"
+
+step_end

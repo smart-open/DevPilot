@@ -11,10 +11,8 @@ docker-compose*.yml
 # CI/CD
 cicd/
 
-# 文档和图片
+# 文档
 *.md
-images/
-user-manual/
 
 # 运行时数据（不打包到镜像）
 data/

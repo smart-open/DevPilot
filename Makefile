@@ -176,3 +176,31 @@ reset-openclaw: ## 重置 OpenClaw 配置（重新生成）
 	rm -f data/openclaw/openclaw.json
 	$(COMPOSE) restart openclaw
 	@printf "$(GREEN)OpenClaw 配置已重置$(RESET)\n"
+
+##@ 技能管理
+
+.PHONY: setup-skills
+setup-skills: ## 安装技能文件到 ~/.openclaw/skills/
+	@bash ./setup-skills.sh
+
+##@ 服务管理（service.sh）
+
+.PHONY: start
+start: ## 一键启动服务（默认 full 模式，可选: make start bot）
+	@bash ./service.sh start $(filter-out $@,$(MAKECMDGOALS))
+
+.PHONY: stop
+stop: ## 停止所有服务（保留数据）
+	@bash ./service.sh stop
+
+.PHONY: svc-status
+svc-status: ## 查看容器状态和资源使用
+	@bash ./service.sh status
+
+.PHONY: svc
+svc: ## 服务管理帮助
+	@bash ./service.sh help
+
+# 防止 make 将 profile 参数当作 target
+%:
+	@:
