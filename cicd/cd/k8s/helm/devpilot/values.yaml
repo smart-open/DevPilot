@@ -25,7 +25,7 @@ agnes:
   # API 密钥（敏感，建议通过 --set 或外部 Secret 注入）
   apiKey: "your-agnes-api-key"
   # 模型名称
-  modelFlash: "agnes-2.0-flash"
+  modelFlash: "agnes-2.5-flash"
   modelImage: "agnes-image-2.1-flash"
   modelVideo: "agnes-video-v2.0"
 

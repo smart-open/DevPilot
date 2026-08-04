@@ -303,7 +303,7 @@ else
 
     # 启动 CC-Switch + Claude Code
     info "远程启动 CC-Switch+Claude 容器 ..."
-    AGNES_MODEL_VALUE="${AGNES_MODEL_FLASH:-agnes-2.0-flash}"
+    AGNES_MODEL_VALUE="${AGNES_MODEL_FLASH:-agnes-2.5-flash}"
     docker run -d \
         --name devpilot-cc-switch-claude \
         --restart unless-stopped \

@@ -170,7 +170,7 @@ echo -e "${CYAN}========================================${NC}"
 info "启动 CC-Switch+Claude 容器 ..."
 
 # 处理可选的 AGNES_MODEL 变量（.env.example 中有 AGNES_MODEL_FLASH）
-AGNES_MODEL_VALUE="${AGNES_MODEL_FLASH:-agnes-2.0-flash}"
+AGNES_MODEL_VALUE="${AGNES_MODEL_FLASH:-agnes-2.5-flash}"
 
 docker run -d \
     --name devpilot-cc-switch-claude \

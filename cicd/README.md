@@ -751,7 +751,7 @@ bash cicd/service-deploy/deploy-service.sh --list
 
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
-| `AGNES_MODEL_FLASH` | 默认文本模型名称 | `agnes-2.0-flash` |
+| `AGNES_MODEL_FLASH` | 默认文本模型名称 | `agnes-2.5-flash` |
 | `DEVPILOT_AUTO_DEPLOY` | 开发完成后自动部署服务 | `false` |
 
 > 组件版本变量（`NODE_IMAGE_TAG` / `OPENCLAW_VERSION` / `CC_SWITCH_VERSION` / `CLAUDE_CODE_VERSION`）由 `versions.env` 统一管理，`init.sh` 会自动加载，一般无需在 `.env` 中重复配置。

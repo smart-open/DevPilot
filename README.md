@@ -2,33 +2,81 @@
 
 Docker Compose 一键部署 AI 自动开发平台：飞书 AI 机器人 + Claude Code 编程助手 + Redis 缓存 + 服务自动部署。全部组件在 Docker 容器内运行，不依赖宿主机环境。Claude Code 开发的服务可自动构建并部署到 Docker / Kubernetes / 远程服务器。
 
+## 支持的大模型平台
+
+DevPilot 支持 5 个主流大模型平台，通过 `LLM_PLATFORM` 环境变量选择，所有平台均走 **OpenAI Chat Completion 协议**：
+
+| 平台名称 | 标识 | API Base URL | 默认模型 | 文档 |
+|---------|------|-------------|---------|------|
+| Agnes AI | `agnes` | `https://api.agnes-ai.cn/v1` | agnes-2.5-flash | [文档](https://www.agnes-ai.cn/zh-Hans/docs/agnes-25-flash) |
+| DeepSeek | `deepseek` | `https://api.deepseek.com/v1` | DeepSeek-V4-Flash | [文档](https://api-docs.deepseek.com/zh-cn/) |
+| GLM（智谱） | `glm` | `https://open.bigmodel.cn/api/paas/v4` | GLM-5.2 | [文档](https://docs.bigmodel.cn/cn/coding-plan/quick-start) |
+| 火山方舟 | `ark` | `https://ark.cn-beijing.volces.com/api/v3` | doubao-seed-2.1-turbo | [文档](https://console.volcengine.com/ark/region:cn-beijing/docs/82379/1928261) |
+| 百炼 | `bailian` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | Qwen3.7-Plus | [文档](https://bailian.console.aliyun.com) |
+
 ## 快速开始
 
+### 系统要求
+- **Docker Engine 24.0+**
+- **Docker Compose v2.20+**
+- **操作系统**：Linux 或 macOS（Windows 建议使用 WSL2）
+- **内存**：推荐 4GB+（生产环境建议 8GB+）
+- **磁盘**：推荐 10GB+ 可用空间
+
+### 部署步骤
 ```bash
 git clone <repo-url> devpilot && cd devpilot
 ./init.sh && ./deploy.sh
 ```
 
-`init.sh` 配置向导只需填写 **3 个必填项**，其余密码自动生成：
+### 配置说明
 
-- API Key（agnes-ai）
-- 飞书 App ID
-- 飞书 App Secret
+`init.sh` 配置向导会引导你完成配置，流程如下：
 
-部署完成后：
+1. **选择大模型平台**：agnes / deepseek / glm / ark / bailian
+2. **配置对应平台的 API Key**
+3. **配置飞书机器人**：App ID 和 App Secret
+4. **其他选项**（端口、自动部署等）使用默认值即可
 
-- 飞书机器人：在飞书中搜索添加机器人，发消息即可获得 AI 回复
-- Claude Code：`docker compose exec cc-switch-claude claude`
-- CC-Switch Web UI：浏览器打开 `http://localhost:8890`
-- OpenClaw Gateway：`http://localhost:18789/healthz`
+### 部署完成后访问
+
+- **飞书机器人**：在飞书客户端搜索并添加机器人，发送消息即可获得 AI 回复
+- **Claude Code**：运行 `docker compose exec cc-switch-claude claude` 或 `make claude`
+- **CC-Switch Web UI**：浏览器打开 `http://localhost:8890`
+- **OpenClaw Gateway**：`http://localhost:18789/healthz`
+
+### 一键启停（推荐使用）
+
+```bash
+./service.sh start      # 启动服务（默认 full 模式）
+./service.sh start bot  # 仅启动飞书机器人
+./service.sh start dev  # 仅启动开发环境
+./service.sh stop       # 停止服务
+./service.sh status     # 查看容器状态
+./service.sh health     # 健康检查
+./service.sh logs       # 查看日志
+./service.sh help       # 查看完整帮助
+```
+
+### 切换大模型平台
+
+修改 `.env` 文件中的 `LLM_PLATFORM` 和对应平台的配置：
+
+```bash
+# 切换到 DeepSeek
+vi .env  # 修改 LLM_PLATFORM=deepseek，配置 DEEPSEEK_API_KEY
+./service.sh restart
+```
+
+> 所有平台均走 OpenAI Chat Completion 协议，切换平台只需修改 `LLM_PLATFORM` 和对应平台的 API Key。
 
 ## 架构
 
 | 容器 | 镜像 | 端口 | 职责 |
 |------|------|------|------|
-| Redis | `redis:8.8.1-alpine` | 6379（内部） | 缓存 + AOF/RDB 持久化 |
-| OpenClaw | `node:22.23.1` + `openclaw@2026.7.1-2` | 18789 | 飞书 AI 机器人（WebSocket 长连接）+ agnes-ai 对接 |
-| CC-Switch + Claude Code | `node:22.23.1` + `cc-switch@v0.21.0` + `claude-code@2.1.220` | 8890 | 供应商配置管理 + 编程助手 + Git |
+| Redis | `redis:8.8.1-alpine3.23` | 6379（内部） | 缓存 + AOF/RDB 持久化 |
+| OpenClaw | `node:24.17.0` + `openclaw@2026.7.1-2` | 18789 | 飞书 AI 机器人（WebSocket 长连接）+ 多平台大模型对接 |
+| CC-Switch + Claude Code | `node:24.17.0` + `cc-switch@v0.21.0` + `claude-code@2.1.220` | 8890 | 供应商配置管理 + 编程助手 + Git |
 
 > 组件版本统一在 [`versions.env`](versions.env) 中管理，这是版本号的单一配置源。修改版本只需编辑该文件，本地脚本与 Dockerfile 会自动加载，无需多处同步。
 
@@ -114,12 +162,12 @@ make setup-skills    # 或 ./setup-skills.sh
 devpilot/
 ├── docker-compose.yml          # 主编排文件
 ├── Makefile                    # 快捷命令
-├── init.sh                     # 配置向导（3 个必填项，密码自动生成）
+├── init.sh                     # 配置向导（选择大模型平台、配置 API Key）
 ├── deploy.sh                   # 一键部署脚本（7 步详细日志）
 ├── service.sh                  # 一键启停脚本（start/stop/restart/status/health/logs）
 ├── setup-skills.sh             # 技能文件安装脚本（复制到 ~/.openclaw/skills/）
 ├── versions.env                # 组件版本单一配置源
-├── .env / .env.example         # 环境变量
+├── .env / .env.example         # 环境变量（含多平台配置）
 ├── .dockerignore               # Docker 构建优化
 ├── conf/                       # 配置文件
 │   ├── redis/redis.conf
@@ -134,6 +182,8 @@ devpilot/
 │   ├── review-SKILL.md         # 代码审查（alibaba/open-code-review）
 │   ├── test-SKILL.md           # 测试验证
 │   └── deploy-SKILL.md         # 提交部署
+├── scripts/                    # 工具脚本
+│   └── llm-init.sh             # 多平台大模型统一初始化脚本
 ├── cicd/                       # CI/CD 配置
 │   ├── lib/common.sh           # 公共函数库（颜色/日志/校验/健康检查）
 │   ├── ci/                     # 平台 CI（GitHub / Gitee / GitLab）

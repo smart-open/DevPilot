@@ -4,6 +4,8 @@ set -e
 # ============================================================
 # DevPilot 交互式配置向导
 # 功能：引导用户填写配置、自动生成密码、生成 .env 文件
+# 支持平台：Agnes AI、DeepSeek、GLM（智谱）、火山方舟、百炼
+# 所有平台均走 OpenAI Chat Completion 协议
 # 用法: ./init.sh
 # ============================================================
 
@@ -42,15 +44,144 @@ read_input() {
     fi
 }
 
+# ---- 选择平台（带验证）----
+select_platform() {
+    echo -e "${CYAN}可用大模型平台（均支持 OpenAI Chat Completion 协议）：${NC}"
+    echo -e "  ${GREEN}1) Agnes AI${NC}          模型: agnes-2.5-flash"
+    echo -e "  ${GREEN}2) DeepSeek${NC}          模型: DeepSeek-V4-Flash"
+    echo -e "  ${GREEN}3) GLM（智谱）${NC}       模型: GLM-5.2"
+    echo -e "  ${GREEN}4) 火山方舟（ARK）${NC}   模型: doubao-seed-2.1-turbo"
+    echo -e "  ${GREEN}5) 百炼（DashScope）${NC} 模型: Qwen3.7-Plus"
+    echo ""
+
+    local selected=""
+
+    while true; do
+        printf "${CYAN}[*] 请选择平台（输入数字或名称）${NC}: "
+        read -r selected
+        selected=$(echo "${selected}" | tr '[:upper:]' '[:lower:]')
+
+        case "${selected}" in
+            1|agnes)
+                LLM_PLATFORM="agnes"
+                break
+                ;;
+            2|deepseek)
+                LLM_PLATFORM="deepseek"
+                break
+                ;;
+            3|glm)
+                LLM_PLATFORM="glm"
+                break
+                ;;
+            4|ark|fangzhou|volcengine)
+                LLM_PLATFORM="ark"
+                break
+                ;;
+            5|bailian|dashscope)
+                LLM_PLATFORM="bailian"
+                break
+                ;;
+            *)
+                warn "无效选项，请重新选择"
+                ;;
+        esac
+    done
+
+    success "已选择平台: ${LLM_PLATFORM}"
+}
+
+# ---- 平台配置 ----
+configure_platform() {
+    local platform="$1"
+    echo ""
+    echo -e "${BLUE}========== 配置 ${platform} 平台 ==========${NC}"
+    echo ""
+
+    case "${platform}" in
+        agnes)
+            printf "${CYAN}[*] Agnes AI API Key${NC}: "
+            read -r AGNES_API_KEY
+            if [ -z "${AGNES_API_KEY}" ]; then
+                die "Agnes AI API Key 不能为空"
+            fi
+
+            AGNES_BASE_URL="https://api.agnes-ai.cn/v1"
+            AGNES_MODEL="agnes-2.5-flash"
+
+            success "Agnes AI 配置完成"
+            ;;
+
+        deepseek)
+            printf "${CYAN}[*] DeepSeek API Key${NC}: "
+            read -r DEEPSEEK_API_KEY
+            if [ -z "${DEEPSEEK_API_KEY}" ]; then
+                die "DeepSeek API Key 不能为空"
+            fi
+
+            DEEPSEEK_BASE_URL="https://api.deepseek.com/v1"
+            DEEPSEEK_MODEL="DeepSeek-V4-Flash"
+            DEEPSEEK_CODE_MODEL="DeepSeek-V4-Flash"
+
+            success "DeepSeek 配置完成"
+            ;;
+
+        glm)
+            printf "${CYAN}[*] GLM（智谱）API Key${NC}: "
+            read -r GLM_API_KEY
+            if [ -z "${GLM_API_KEY}" ]; then
+                die "GLM API Key 不能为空"
+            fi
+
+            GLM_BASE_URL="https://open.bigmodel.cn/api/paas/v4"
+            GLM_MODEL="GLM-5.2"
+
+            success "GLM（智谱）配置完成"
+            ;;
+
+        ark)
+            printf "${CYAN}[*] 火山方舟 API Key${NC}: "
+            read -r ARK_API_KEY
+            if [ -z "${ARK_API_KEY}" ]; then
+                die "火山方舟 API Key 不能为空"
+            fi
+
+            ARK_BASE_URL="https://ark.cn-beijing.volces.com/api/v3"
+            ARK_MODEL="doubao-seed-2.1-turbo"
+            ARK_CODE_PLAN_MODEL="doubao-seed-2.1-turbo"
+
+            success "火山方舟配置完成"
+            ;;
+
+        bailian)
+            printf "${CYAN}[*] 百炼 API Key${NC}: "
+            read -r BAILIAN_API_KEY
+            if [ -z "${BAILIAN_API_KEY}" ]; then
+                die "百炼 API Key 不能为空"
+            fi
+
+            BAILIAN_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1"
+            BAILIAN_MODEL="Qwen3.7-Plus"
+
+            success "百炼配置完成"
+            ;;
+
+        *)
+            die "未知平台: ${platform}"
+            ;;
+    esac
+}
+
 # ---- 定位项目根目录 ----
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
 # ---- 欢迎信息 ----
 print_header "DevPilot 配置向导"
-echo -e "  本向导将引导你完成 DevPilot 的配置。"
-echo -e "  只需填写 ${GREEN}3 个必填项${NC}，其余将自动生成。"
-echo -e "  ${YELLOW}带 [*] 的为必填项${NC}"
+echo -e "  本向导将引导你完成 DevPilot 的配置，支持 ${GREEN}多平台大模型${NC}。"
+echo -e "  支持平台：${CYAN}Agnes AI、DeepSeek、GLM、火山方舟、百炼${NC}"
+echo -e "  所有平台均走 ${GREEN}OpenAI Chat Completion 协议${NC}"
+echo -e "  带 [*] 的为必填项"
 echo ""
 
 # ============================================================
@@ -64,31 +195,32 @@ if [ -f ".env" ]; then
         info "保留现有配置，退出"
         exit 0
     fi
-    # 备份旧配置
     cp .env ".env.bak.$(date +%Y%m%d%H%M%S)"
     success "已备份旧配置到 .env.bak.*"
 fi
 
 # ============================================================
-# 2. 第 1 步：必填配置（3 个必填项）
+# 2. 第 1 步：选择大模型平台
 # ============================================================
-echo -e "${BLUE}========== 第 1 步：必填配置 ==========${NC}"
+echo -e "${BLUE}========== 第 1 步：选择大模型平台 ==========${NC}"
 echo ""
+select_platform
 
-# 必填：agnes-ai API Key
-printf "${CYAN}[*] agnes-ai API Key${NC}: "
-read -r AGNES_API_KEY
-if [ -z "${AGNES_API_KEY}" ]; then
-    die "agnes-ai API Key 不能为空"
-fi
-success "API Key 已设置"
+# ============================================================
+# 3. 第 2 步：配置所选平台
+# ============================================================
+configure_platform "${LLM_PLATFORM}"
 
+# ============================================================
+# 4. 第 3 步：必填的飞书配置
+# ============================================================
+echo ""
+echo -e "${BLUE}========== 第 3 步：飞书机器人配置 ==========${NC}"
 echo ""
 echo -e "  ${YELLOW}在飞书开放平台创建应用后获取以下信息${NC}"
 echo -e "  应用类型：企业自建应用 | 事件订阅：长连接模式"
 echo ""
 
-# 必填：飞书 App ID
 printf "${CYAN}[*] 飞书 App ID${NC}: "
 read -r FEISHU_APP_ID
 if [ -z "${FEISHU_APP_ID}" ]; then
@@ -96,7 +228,6 @@ if [ -z "${FEISHU_APP_ID}" ]; then
 fi
 success "App ID 已设置"
 
-# 必填：飞书 App Secret
 printf "${CYAN}[*] 飞书 App Secret${NC}: "
 read -r FEISHU_APP_SECRET
 if [ -z "${FEISHU_APP_SECRET}" ]; then
@@ -105,33 +236,26 @@ fi
 success "App Secret 已设置"
 
 # ============================================================
-# 3. 第 2 步：可选配置（带默认值，直接回车即可）
+# 5. 第 4 步：可选配置（带默认值，直接回车即可）
 # ============================================================
 echo ""
-echo -e "${BLUE}========== 第 2 步：可选配置（直接回车使用默认值） ==========${NC}"
+echo -e "${BLUE}========== 第 4 步：可选配置（直接回车使用默认值） ==========${NC}"
 echo ""
 
-read_input "agnes-ai API 地址" "https://apihub.agnes-ai.com/v1" "AGNES_BASE_URL"
 read_input "OpenClaw Gateway 端口" "18789" "OPENCLAW_GATEWAY_PORT"
 read_input "CC-Switch Web UI 端口" "8890" "CC_SWITCH_WEB_PORT"
 read_input "是否启用自动部署 (true/false)" "false" "DEVPILOT_AUTO_DEPLOY"
 
 # ============================================================
-# 4. 自动生成安全密码 & 加载版本（静默处理）
+# 6. 自动生成安全密码 & 加载版本（静默处理）
 # ============================================================
 info "自动生成安全密码..."
 REDIS_PASSWORD=$(gen_password 32)
 OPENCLAW_GATEWAY_TOKEN=$(gen_password 32)
 success "Redis 密码与 Gateway Token 已生成"
 
-# 模型默认值
-AGNES_MODEL_FLASH="agnes-2.0-flash"
-
-# 版本号从 versions.env 自动加载
-success "组件版本已从 versions.env 加载"
-
 # ============================================================
-# 5. 生成 .env 文件
+# 7. 生成 .env 文件
 # ============================================================
 echo ""
 echo -e "${BLUE}========== 生成 .env 文件 ==========${NC}"
@@ -141,20 +265,45 @@ cat > .env << EOF
 # ============================================================
 # DevPilot 环境变量配置
 # 由 init.sh 向导生成 | $(date '+%Y-%m-%d %H:%M:%S')
+# 选择平台：${LLM_PLATFORM}
+# 所有平台均走 OpenAI Chat Completion 协议
 # ============================================================
 
-# ---- agnes-ai 大模型配置 ----
+# ---- 大模型平台选择 ----
+LLM_PLATFORM=${LLM_PLATFORM}
+
+# ---- Agnes AI 平台 ----
 AGNES_API_KEY=${AGNES_API_KEY}
 AGNES_BASE_URL=${AGNES_BASE_URL}
-AGNES_MODEL_FLASH=${AGNES_MODEL_FLASH}
+AGNES_MODEL=${AGNES_MODEL}
+
+# ---- DeepSeek 平台 ----
+DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL}
+DEEPSEEK_MODEL=${DEEPSEEK_MODEL}
+DEEPSEEK_CODE_MODEL=${DEEPSEEK_CODE_MODEL}
+
+# ---- GLM（智谱）平台 ----
+GLM_API_KEY=${GLM_API_KEY}
+GLM_BASE_URL=${GLM_BASE_URL}
+GLM_MODEL=${GLM_MODEL}
+
+# ---- 火山方舟（ARK）平台 ----
+ARK_API_KEY=${ARK_API_KEY}
+ARK_BASE_URL=${ARK_BASE_URL}
+ARK_MODEL=${ARK_MODEL}
+ARK_CODE_PLAN_MODEL=${ARK_CODE_PLAN_MODEL}
+
+# ---- 百炼平台 ----
+BAILIAN_API_KEY=${BAILIAN_API_KEY}
+BAILIAN_BASE_URL=${BAILIAN_BASE_URL}
+BAILIAN_MODEL=${BAILIAN_MODEL}
 
 # ---- 飞书配置 ----
-# WebSocket 长连接模式：仅需 App ID 和 App Secret
 FEISHU_APP_ID=${FEISHU_APP_ID}
 FEISHU_APP_SECRET=${FEISHU_APP_SECRET}
 
 # ---- Redis 配置 ----
-# 密码由 init.sh 自动生成
 REDIS_PASSWORD=${REDIS_PASSWORD}
 
 # ---- OpenClaw 配置 ----
@@ -182,7 +331,7 @@ EOF
 success ".env 文件已生成"
 
 # ============================================================
-# 6. 配置摘要 & 下一步指引
+# 8. 配置摘要 & 下一步指引
 # ============================================================
 echo ""
 echo -e "${GREEN}========================================${NC}"
@@ -190,23 +339,49 @@ echo -e "${GREEN}  配置完成！${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo -e "${CYAN}配置摘要：${NC}"
-echo -e "  agnes-ai API Key:  $(echo "${AGNES_API_KEY}" | sed 's/\(.\{8\}\).*/\1.../')"
-echo -e "  agnes-ai 地址:     ${AGNES_BASE_URL}"
-echo -e "  飞书 App ID:       ${FEISHU_APP_ID}"
-echo -e "  Redis 密码:        $(echo "${REDIS_PASSWORD}" | sed 's/./*/g')"
-echo -e "  Gateway Token:     $(echo "${OPENCLAW_GATEWAY_TOKEN}" | sed 's/./*/g')"
-echo -e "  Gateway 端口:      ${OPENCLAW_GATEWAY_PORT}"
-echo -e "  Web UI 端口:       ${CC_SWITCH_WEB_PORT}"
-echo -e "  自动部署:          ${DEVPILOT_AUTO_DEPLOY}"
+echo -e "  大模型平台:     ${GREEN}${LLM_PLATFORM}${NC}"
+case "${LLM_PLATFORM}" in
+    agnes)
+        echo -e "  API Key:        $(echo "${AGNES_API_KEY}" | sed 's/\(.\{8\}\).*/\1.../')"
+        echo -e "  API 地址:       ${AGNES_BASE_URL}"
+        echo -e "  模型:           ${AGNES_MODEL}"
+        ;;
+    deepseek)
+        echo -e "  API Key:        $(echo "${DEEPSEEK_API_KEY}" | sed 's/\(.\{8\}\).*/\1.../')"
+        echo -e "  API 地址:       ${DEEPSEEK_BASE_URL}"
+        echo -e "  模型:           ${DEEPSEEK_MODEL}"
+        ;;
+    glm)
+        echo -e "  API Key:        $(echo "${GLM_API_KEY}" | sed 's/\(.\{8\}\).*/\1.../')"
+        echo -e "  API 地址:       ${GLM_BASE_URL}"
+        echo -e "  模型:           ${GLM_MODEL}"
+        ;;
+    ark)
+        echo -e "  API Key:        $(echo "${ARK_API_KEY}" | sed 's/\(.\{8\}\).*/\1.../')"
+        echo -e "  API 地址:       ${ARK_BASE_URL}"
+        echo -e "  模型:           ${ARK_MODEL}"
+        ;;
+    bailian)
+        echo -e "  API Key:        $(echo "${BAILIAN_API_KEY}" | sed 's/\(.\{8\}\).*/\1.../')"
+        echo -e "  API 地址:       ${BAILIAN_BASE_URL}"
+        echo -e "  模型:           ${BAILIAN_MODEL}"
+        ;;
+esac
+echo -e "  飞书 App ID:   ${FEISHU_APP_ID}"
+echo -e "  Redis 密码:    $(echo "${REDIS_PASSWORD}" | sed 's/./*/g')"
+echo -e "  Gateway Token: $(echo "${OPENCLAW_GATEWAY_TOKEN}" | sed 's/./*/g')"
+echo -e "  Gateway 端口:  ${OPENCLAW_GATEWAY_PORT}"
+echo -e "  Web UI 端口:   ${CC_SWITCH_WEB_PORT}"
+echo -e "  自动部署:      ${DEVPILOT_AUTO_DEPLOY}"
 echo ""
 echo -e "${CYAN}组件版本（来自 versions.env）：${NC}"
-echo -e "  Node.js:           ${NODE_IMAGE_TAG}"
-echo -e "  OpenClaw:          ${OPENCLAW_VERSION}"
-echo -e "  CC-Switch:         ${CC_SWITCH_VERSION}"
-echo -e "  Claude Code:       ${CLAUDE_CODE_VERSION}"
+echo -e "  Node.js:       ${NODE_IMAGE_TAG}"
+echo -e "  OpenClaw:      ${OPENCLAW_VERSION}"
+echo -e "  CC-Switch:     ${CC_SWITCH_VERSION}"
+echo -e "  Claude Code:   ${CLAUDE_CODE_VERSION}"
 echo ""
 echo -e "${CYAN}下一步：${NC}"
 echo -e "  ${GREEN}./deploy.sh${NC}  一键部署"
 echo ""
-echo -e "${YELLOW}提示：${NC}如需修改配置，编辑 .env 文件后重新运行 deploy.sh"
+echo -e "${YELLOW}提示：${NC}如需切换平台或修改配置，编辑 .env 文件后重新运行 deploy.sh"
 echo ""

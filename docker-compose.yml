@@ -3,13 +3,8 @@ name: devpilot
 # ============================================================
 # DevPilot Docker Compose 一键部署
 # 3 个容器：Redis + OpenClaw + CC-Switch/Claude Code
-#
-# 用法:
-#   docker compose up -d --build          # 全部启动（默认）
-#   docker compose --profile bot up -d    # 仅飞书机器人（Redis + OpenClaw）
-#   docker compose --profile dev up -d    # 仅开发环境（CC-Switch + Claude Code）
-#
-# 首次使用推荐: ./init.sh && ./deploy.sh
+# 支持多平台大模型：Agnes AI、DeepSeek、GLM、火山方舟、百炼
+# 所有平台均走 OpenAI Chat Completion 协议
 # ============================================================
 
 x-logging: &default-logging
@@ -19,9 +14,11 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
-  # ---- 1. Redis：缓存 + 持久化 ----
+  # ============================================================
+  # Redis：缓存 + 持久化（推荐 Redis 8 LTS）
+  # ============================================================
   redis:
-    image: redis:8.8.1-alpine
+    image: redis:8.8.1-alpine3.23
     container_name: devpilot-redis
     restart: unless-stopped
     profiles: ["", "full", "bot"]
@@ -47,8 +44,12 @@ services:
       resources:
         limits:
           memory: 512M
+        reservations:
+          memory: 256M
 
-  # ---- 2. OpenClaw：飞书 AI 机器人 + agnes-ai ----
+  # ============================================================
+  # OpenClaw：飞书 AI 机器人 + 多平台大模型对接
+  # ============================================================
   openclaw:
     build:
       context: .
@@ -64,8 +65,36 @@ services:
         condition: service_healthy
     environment:
       - TZ=${TZ}
+      - LLM_PLATFORM=${LLM_PLATFORM}
+
+      # Agnes AI 平台
       - AGNES_API_KEY=${AGNES_API_KEY}
       - AGNES_BASE_URL=${AGNES_BASE_URL}
+      - AGNES_MODEL=${AGNES_MODEL}
+
+      # DeepSeek 平台
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL}
+      - DEEPSEEK_CODE_MODEL=${DEEPSEEK_CODE_MODEL}
+
+      # GLM（智谱）平台
+      - GLM_API_KEY=${GLM_API_KEY}
+      - GLM_BASE_URL=${GLM_BASE_URL}
+      - GLM_MODEL=${GLM_MODEL}
+
+      # 火山方舟（ARK）平台
+      - ARK_API_KEY=${ARK_API_KEY}
+      - ARK_BASE_URL=${ARK_BASE_URL}
+      - ARK_MODEL=${ARK_MODEL}
+      - ARK_CODE_PLAN_MODEL=${ARK_CODE_PLAN_MODEL}
+
+      # 百炼平台
+      - BAILIAN_API_KEY=${BAILIAN_API_KEY}
+      - BAILIAN_BASE_URL=${BAILIAN_BASE_URL}
+      - BAILIAN_MODEL=${BAILIAN_MODEL}
+
+      # OpenClaw 核心配置
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
       - OPENCLAW_GATEWAY_PORT=${OPENCLAW_GATEWAY_PORT}
       - FEISHU_APP_ID=${FEISHU_APP_ID}
@@ -89,8 +118,12 @@ services:
       resources:
         limits:
           memory: 768M
+        reservations:
+          memory: 512M
 
-  # ---- 3. CC-Switch + Claude Code 合体容器 ----
+  # ============================================================
+  # CC-Switch + Claude Code：合体容器
+  # ============================================================
   cc-switch-claude:
     build:
       context: .
@@ -109,18 +142,42 @@ services:
         condition: service_started
     environment:
       - TZ=${TZ}
-      - HOME=/home/node
-      # CC-Switch Web 通过 PORT 和 HOST 环境变量配置
+      - LLM_PLATFORM=${LLM_PLATFORM}
+
+      # Agnes AI 平台
+      - AGNES_API_KEY=${AGNES_API_KEY}
+      - AGNES_BASE_URL=${AGNES_BASE_URL}
+      - AGNES_MODEL=${AGNES_MODEL}
+
+      # DeepSeek 平台
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL}
+      - DEEPSEEK_CODE_MODEL=${DEEPSEEK_CODE_MODEL}
+
+      # GLM（智谱）平台
+      - GLM_API_KEY=${GLM_API_KEY}
+      - GLM_BASE_URL=${GLM_BASE_URL}
+      - GLM_MODEL=${GLM_MODEL}
+
+      # 火山方舟（ARK）平台
+      - ARK_API_KEY=${ARK_API_KEY}
+      - ARK_BASE_URL=${ARK_BASE_URL}
+      - ARK_MODEL=${ARK_MODEL}
+      - ARK_CODE_PLAN_MODEL=${ARK_CODE_PLAN_MODEL}
+
+      # 百炼平台
+      - BAILIAN_API_KEY=${BAILIAN_API_KEY}
+      - BAILIAN_BASE_URL=${BAILIAN_BASE_URL}
+      - BAILIAN_MODEL=${BAILIAN_MODEL}
+
+      # CC-Switch Web 配置
       - PORT=${CC_SWITCH_WEB_PORT}
       - HOST=0.0.0.0
-      # agnes-ai 配置（CC-Switch 自动配置 + Claude Code fallback）
-      - AGNES_BASE_URL=${AGNES_BASE_URL}
-      - AGNES_API_KEY=${AGNES_API_KEY}
-      - ANTHROPIC_BASE_URL=${AGNES_BASE_URL}
-      - ANTHROPIC_API_KEY=${AGNES_API_KEY}
-      - ANTHROPIC_MODEL=${AGNES_MODEL_FLASH}
+      - HOME=/home/node
+
       # 服务自动部署
-      - DEVPILOT_AUTO_DEPLOY=${DEVPILOT_AUTO_DEPLOY:-false}
+      - DEVPILOT_AUTO_DEPLOY=${DEVPILOT_AUTO_DEPLOY}
     volumes:
       - ./workspace:/workspace
       - ./data/cc-switch-claude:/home/node
@@ -140,6 +197,8 @@ services:
       resources:
         limits:
           memory: 768M
+        reservations:
+          memory: 512M
 
 networks:
   devpilot-network:
