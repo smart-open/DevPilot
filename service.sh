@@ -168,19 +168,27 @@ read_llm_config
 # 打印当前模型配置
 # ============================================================
 print_model_config() {
-    echo ""
-    echo -e "${CYAN}========== 当前大模型平台配置 ==========${NC}"
-    echo -e "  ${CYAN}平台标识：${NC}${LLM_PLATFORM}"
-    echo -e "  ${CYAN}平台名称：${NC}${LLM_PLATFORM_NAME}"
-    echo -e "  ${CYAN}API 地址：${NC}${LLM_BASE_URL:-未配置}"
-    echo -e "  ${CYAN}模型名称：${NC}${LLM_MODEL:-未配置}"
+    local model_key_display
     if [ -n "${LLM_API_KEY}" ] && [ "${LLM_API_KEY}" != "your-"* ]; then
-        echo -e "  ${CYAN}API Key：${NC}$(echo "${LLM_API_KEY}" | sed 's/\(.\{8\}\).*/\1.../')"
+        model_key_display=$(echo "${LLM_API_KEY}" | sed 's/\(.\{8\}\).*/\1.../')
     else
-        echo -e "  ${RED}API Key：未设置或为占位符${NC}"
+        model_key_display="未设置或为占位符"
     fi
-    echo -e "  ${CYAN}协议：${NC}OpenAI Chat Completion"
+
+    local config_block
+    config_block="========== 当前大模型平台配置 ==========
+  平台标识：${LLM_PLATFORM}
+  平台名称：${LLM_PLATFORM_NAME}
+  API 地址：${LLM_BASE_URL:-未配置}
+  模型名称：${LLM_MODEL:-未配置}
+  API Key：${model_key_display}
+  协议：OpenAI Chat Completion"
+
     echo ""
+    echo -e "${CYAN}${config_block}${NC}"
+    echo ""
+    # 同时写入日志文件
+    echo "${config_block}" >> "${LOG_FILE}"
 }
 
 # ============================================================
@@ -192,106 +200,185 @@ verify_container_model() {
     local container_name="devpilot-openclaw"
     local found_errors=0
 
-    # 检查 OpenClaw 容器的 LLM_PLATFORM
+    # 收集所有失败的检查项（用于最终汇总）
+    local error_details=""
+
+    # ============================================================
+    # 检查 1/5: OpenClaw 容器的 LLM_PLATFORM
+    # ============================================================
     local container_platform
     container_platform=$(docker exec "${container_name}" printenv LLM_PLATFORM 2>/dev/null || echo "")
     if [ -z "${container_platform}" ]; then
-        warn "无法读取 ${container_name} 的 LLM_PLATFORM 环境变量"
-        debug "  docker exec ${container_name} printenv LLM_PLATFORM -> 空"
+        error "${container_name} 验证失败：无法读取 LLM_PLATFORM 环境变量"
+        error "  -> 容器可能未启动或未传入 LLM_PLATFORM 环境变量"
+        error "  -> 修复：检查 docker-compose.yml 中 openclaw 服务是否包含 LLM_PLATFORM=\${LLM_PLATFORM}"
+        error_details="${error_details}\n  [FAIL] ${container_name} | LLM_PLATFORM | 无法读取环境变量"
         found_errors=1
     elif [ "${container_platform}" != "${LLM_PLATFORM}" ]; then
-        warn "${container_name} 的 LLM_PLATFORM=${container_platform}，与 .env 配置(${LLM_PLATFORM})不一致！"
-        warn "可能原因：容器未重建（尝试 ./service.sh restart 重建）"
-        debug "  容器 LLM_PLATFORM: ${container_platform} vs .env LLM_PLATFORM: ${LLM_PLATFORM}"
+        error "${container_name} 验证失败：LLM_PLATFORM 不一致"
+        error "  -> 容器内值: ${container_platform}"
+        error "  -> .env 配置: ${LLM_PLATFORM}"
+        error "  -> 修复：运行 ./service.sh restart 重建容器"
+        error_details="${error_details}\n  [FAIL] ${container_name} | LLM_PLATFORM | 容器=${container_platform} vs 配置=${LLM_PLATFORM}"
         found_errors=1
     else
-        success "${container_name} LLM_PLATFORM=${container_platform} 与配置一致"
-        debug "  LLM_PLATFORM 验证通过"
+        success "[1/5] ${container_name} LLM_PLATFORM=${container_platform} 与配置一致"
     fi
 
-    # 检查 CC-Switch 容器的 LLM_PLATFORM（如果容器存在）
+    # ============================================================
+    # 检查 2-5: CC-Switch 容器（如果存在）
+    # ============================================================
     local cc_container="devpilot-cc-switch-claude"
     if docker inspect "${cc_container}" &>/dev/null; then
+
+        # ---- 检查 2/5: CC-Switch LLM_PLATFORM ----
         local cc_platform
         cc_platform=$(docker exec "${cc_container}" printenv LLM_PLATFORM 2>/dev/null || echo "")
         if [ "${cc_platform}" != "${LLM_PLATFORM}" ]; then
-            warn "${cc_container} 的 LLM_PLATFORM=${cc_platform}，与 .env 配置(${LLM_PLATFORM})不一致！"
-            warn "可能原因：容器未重建（尝试 ./service.sh restart 重建）"
-            debug "  CC LLM_PLATFORM: ${cc_platform} vs .env LLM_PLATFORM: ${LLM_PLATFORM}"
+            error "${cc_container} 验证失败：LLM_PLATFORM 不一致"
+            error "  -> 容器内值: ${cc_platform:-（空）}"
+            error "  -> .env 配置: ${LLM_PLATFORM}"
+            error "  -> 修复：运行 ./service.sh restart 重建容器"
+            error_details="${error_details}\n  [FAIL] ${cc_container} | LLM_PLATFORM | 容器=${cc_platform:-（空）} vs 配置=${LLM_PLATFORM}"
             found_errors=1
         else
-            success "${cc_container} LLM_PLATFORM=${cc_platform} 与配置一致"
-            debug "  CC-Switch LLM_PLATFORM 验证通过"
+            success "[2/5] ${cc_container} LLM_PLATFORM=${cc_platform} 与配置一致"
         fi
 
-        # 检查 CC-Switch 配置文件中的 activeProvider
+        # ---- 检查 3/5: CC-Switch activeProvider ----
         local cc_config="/home/node/.cc-switch/config.json"
         local active_provider
         active_provider=$(docker exec "${cc_container}" cat "${cc_config}" 2>/dev/null | grep activeProvider | sed 's/.*: "\(.*\)".*/\1/' 2>/dev/null || echo "")
         if [ -n "${active_provider}" ]; then
-            debug "  CC-Switch activeProvider: ${active_provider}"
             # 映射平台标识到供应商名称
             local expected_provider="${LLM_PLATFORM}"
             case "${LLM_PLATFORM}" in
                 agnes) expected_provider="agnes-ai" ;;
             esac
             if [ "${active_provider}" != "${expected_provider}" ]; then
-                warn "CC-Switch activeProvider=${active_provider}，与期望(${expected_provider})不一致"
-                warn "可能原因：配置文件已存在且未被覆盖。删除 data/cc-switch-claude/.cc-switch/config.json 后重启"
-                debug "  activeProvider: ${active_provider} vs expected: ${expected_provider}"
+                error "${cc_container} 验证失败：activeProvider 不一致"
+                error "  -> 配置文件: ${cc_config}"
+                error "  -> 当前值:   ${active_provider}"
+                error "  -> 期望值:   ${expected_provider}"
+                error "  -> 修复：删除 data/cc-switch-claude/.cc-switch/config.json 后运行 ./service.sh restart"
+                error_details="${error_details}\n  [FAIL] ${cc_container} | activeProvider | 当前=${active_provider} vs 期望=${expected_provider}"
                 found_errors=1
             else
-                success "CC-Switch activeProvider=${active_provider} 与期望一致"
-                debug "  activeProvider 验证通过"
+                success "[3/5] ${cc_container} activeProvider=${active_provider} 与期望一致"
             fi
         else
-            debug "  CC-Switch 配置文件不存在或无法读取，跳过 activeProvider 检查"
+            warn "[3/5] ${cc_container} 配置文件不存在或无法读取，跳过 activeProvider 检查"
+            error_details="${error_details}\n  [SKIP] ${cc_container} | activeProvider | 配置文件不存在"
         fi
 
-        # 检查 ANTHROPIC_BASE_URL 是否已正确设置
+        # ---- 检查 4/5: CC-Switch ANTHROPIC_BASE_URL ----
         local anthropic_url
         anthropic_url=$(docker exec "${cc_container}" printenv ANTHROPIC_BASE_URL 2>/dev/null || echo "")
         if [ -n "${anthropic_url}" ]; then
-            debug "  CC-Switch ANTHROPIC_BASE_URL: ${anthropic_url}"
             if [ "${anthropic_url}" != "${LLM_BASE_URL}" ]; then
-                warn "CC-Switch ANTHROPIC_BASE_URL 与配置不一致"
-                warn "  容器: ${anthropic_url}"
-                warn "  配置: ${LLM_BASE_URL}"
+                error "${cc_container} 验证失败：ANTHROPIC_BASE_URL 不一致"
+                error "  -> 容器内值: ${anthropic_url}"
+                error "  -> .env 配置: ${LLM_BASE_URL}"
+                error "  -> 修复：运行 ./service.sh restart 重建容器（start.sh 会根据 LLM_PLATFORM 动态设置）"
+                error_details="${error_details}\n  [FAIL] ${cc_container} | ANTHROPIC_BASE_URL | 容器=${anthropic_url} vs 配置=${LLM_BASE_URL}"
                 found_errors=1
             else
-                success "CC-Switch ANTHROPIC_BASE_URL 与配置一致"
+                success "[4/5] ${cc_container} ANTHROPIC_BASE_URL 与配置一致"
             fi
+        else
+            warn "[4/5] ${cc_container} ANTHROPIC_BASE_URL 未设置（可能容器尚未完全启动）"
+            error_details="${error_details}\n  [SKIP] ${cc_container} | ANTHROPIC_BASE_URL | 未设置"
+        fi
+
+        # ---- 检查 5/5: CC-Switch ANTHROPIC_MODEL ----
+        local anthropic_model
+        anthropic_model=$(docker exec "${cc_container}" printenv ANTHROPIC_MODEL 2>/dev/null || echo "")
+        if [ -n "${anthropic_model}" ]; then
+            if [ "${anthropic_model}" != "${LLM_MODEL}" ]; then
+                error "${cc_container} 验证失败：ANTHROPIC_MODEL 不一致"
+                error "  -> 容器内值: ${anthropic_model}"
+                error "  -> .env 配置: ${LLM_MODEL}"
+                error "  -> 修复：运行 ./service.sh restart 重建容器"
+                error_details="${error_details}\n  [FAIL] ${cc_container} | ANTHROPIC_MODEL | 容器=${anthropic_model} vs 配置=${LLM_MODEL}"
+                found_errors=1
+            else
+                success "[5/5] ${cc_container} ANTHROPIC_MODEL 与配置一致"
+            fi
+        else
+            warn "[5/5] ${cc_container} ANTHROPIC_MODEL 未设置（可能容器尚未完全启动）"
+            error_details="${error_details}\n  [SKIP] ${cc_container} | ANTHROPIC_MODEL | 未设置"
         fi
     else
-        debug "  ${cc_container} 不存在，跳过验证"
+        warn "${cc_container} 不存在，跳过检查 2-5"
+        error_details="${error_details}\n  [SKIP] ${cc_container} | 容器不存在"
     fi
 
-    # 检查 API Key 是否为占位符
+    # ============================================================
+    # 附加检查：API Key 是否为占位符
+    # ============================================================
     if echo "${LLM_API_KEY}" | grep -q "^your-"; then
-        error "API Key 仍为占位符(${LLM_API_KEY})，请编辑 .env 设置真实 API Key"
+        error "API Key 验证失败：仍为占位符"
+        error "  -> 当前值: ${LLM_API_KEY}"
+        error "  -> 修复：编辑 .env 设置真实的 ${LLM_PLATFORM} 平台 API Key"
+        error_details="${error_details}\n  [FAIL] .env | API Key | 仍为占位符(${LLM_API_KEY})"
         found_errors=1
     fi
 
+    # ============================================================
+    # 最终汇总
+    # ============================================================
     echo ""
     if [ ${found_errors} -eq 0 ]; then
         success "大模型配置验证通过，所有容器配置一致"
+        success "模型切换成功：${LLM_PLATFORM_NAME} | ${LLM_MODEL} | ${LLM_BASE_URL}"
         {
             echo ""
             echo "--- 模型配置验证 ---"
             echo "结果: 通过"
+            echo "状态: 模型切换成功"
             echo "平台: ${LLM_PLATFORM} (${LLM_PLATFORM_NAME})"
             echo "模型: ${LLM_MODEL}"
             echo "API 地址: ${LLM_BASE_URL}"
+            echo "检查项:"
+            echo "  [1/5] ${container_name} LLM_PLATFORM: 一致"
+            echo "  [2/5] devpilot-cc-switch-claude LLM_PLATFORM: 一致"
+            echo "  [3/5] devpilot-cc-switch-claude activeProvider: 一致"
+            echo "  [4/5] devpilot-cc-switch-claude ANTHROPIC_BASE_URL: 一致"
+            echo "  [5/5] devpilot-cc-switch-claude ANTHROPIC_MODEL: 一致"
+            echo "  API Key: 已设置且非占位符"
         } >> "${LOG_FILE}"
     else
-        warn "大模型配置验证发现问题，请按上述提示修复"
+        error "模型切换失败！以下检查项未通过："
+        echo -e "${RED}========================================${NC}"
+        echo -e "${RED}  模型切换失败 - 详细错误汇总${NC}"
+        echo -e "${RED}========================================${NC}"
+        echo -e "${RED}  目标平台: ${LLM_PLATFORM} (${LLM_PLATFORM_NAME})${NC}"
+        echo -e "${RED}  目标模型: ${LLM_MODEL}${NC}"
+        echo -e "${RED}  目标 API: ${LLM_BASE_URL}${NC}"
+        echo -e "${RED}----------------------------------------${NC}"
+        echo -e "${RED}${error_details}${NC}"
+        echo -e "${RED}========================================${NC}"
+        echo ""
+        warn "修复建议："
+        echo -e "  1. 容器环境变量不一致 -> 运行 ${GREEN}./service.sh restart${NC} 重建容器"
+        echo -e "  2. activeProvider 不一致 -> 删除 ${GREEN}data/cc-switch-claude/.cc-switch/config.json${NC} 后重启"
+        echo -e "  3. API Key 为占位符 -> 编辑 ${GREEN}.env${NC} 设置真实 API Key"
+        echo ""
         {
             echo ""
             echo "--- 模型配置验证 ---"
-            echo "结果: 有问题"
-            echo "平台: ${LLM_PLATFORM} (${LLM_PLATFORM_NAME})"
-            echo "模型: ${LLM_MODEL}"
-            echo "API 地址: ${LLM_BASE_URL}"
+            echo "结果: 失败"
+            echo "状态: 模型切换失败"
+            echo "目标平台: ${LLM_PLATFORM} (${LLM_PLATFORM_NAME})"
+            echo "目标模型: ${LLM_MODEL}"
+            echo "目标 API: ${LLM_BASE_URL}"
+            echo "失败检查项:"
+            echo -e "${error_details}"
+            echo ""
+            echo "修复建议:"
+            echo "  1. 容器环境变量不一致 -> 运行 ./service.sh restart 重建容器"
+            echo "  2. activeProvider 不一致 -> 删除 data/cc-switch-claude/.cc-switch/config.json 后重启"
+            echo "  3. API Key 为占位符 -> 编辑 .env 设置真实 API Key"
         } >> "${LOG_FILE}"
     fi
 }
@@ -432,16 +519,20 @@ do_start() {
     success "DevPilot 服务已就绪"
     print_separator
 
+    local summary_block
+    summary_block=""
     if [ "${profile_name}" = "full" ] || [ "${profile_name}" = "bot" ]; then
-        echo -e "  ${CYAN}OpenClaw:${NC}  http://localhost:${GATEWAY_PORT}"
+        summary_block="${summary_block}  OpenClaw:  http://localhost:${GATEWAY_PORT}\n"
     fi
     if [ "${profile_name}" = "full" ] || [ "${profile_name}" = "dev" ]; then
-        echo -e "  ${CYAN}CC-Switch:${NC} http://localhost:${WEB_PORT}"
+        summary_block="${summary_block}  CC-Switch: http://localhost:${WEB_PORT}\n"
     fi
-    echo -e "  ${CYAN}模型平台：${NC}${LLM_PLATFORM_NAME} (${LLM_MODEL})"
+    summary_block="${summary_block}  模型平台：${LLM_PLATFORM_NAME} (${LLM_MODEL})"
+
+    echo -e "${CYAN}${summary_block}${NC}"
     echo ""
 
-    # 总结日志
+    # 总结日志（含模型切换确认）
     {
         echo ""
         echo "--- 启动总结 ---"
@@ -457,6 +548,7 @@ do_start() {
         if [ "${profile_name}" = "full" ] || [ "${profile_name}" = "dev" ]; then
             echo "  CC-Switch: http://localhost:${WEB_PORT}"
         fi
+        echo "模型切换状态: 成功"
         echo "完成!"
     } >> "${LOG_FILE}"
 }
@@ -496,10 +588,26 @@ do_restart() {
     print_header "重启 DevPilot 服务（模式: ${profile_name}）"
     debug "准备重启服务"
 
+    # 记录重启前的平台（用于切换对比）
+    local old_platform="${LLM_PLATFORM}"
+    local old_model="${LLM_MODEL}"
+
     # 重新读取配置（确认是否有变更）
     info "重新读取配置..."
     read_llm_config
     print_model_config
+
+    # 检测平台是否发生变化
+    if [ "${old_platform}" != "${LLM_PLATFORM}" ]; then
+        info "检测到平台变更: ${old_platform} -> ${LLM_PLATFORM}"
+        echo "[变更] 平台: ${old_platform} -> ${LLM_PLATFORM}" >> "${LOG_FILE}"
+        if [ "${old_model}" != "${LLM_MODEL}" ]; then
+            info "检测到模型变更: ${old_model} -> ${LLM_MODEL}"
+            echo "[变更] 模型: ${old_model} -> ${LLM_MODEL}" >> "${LOG_FILE}"
+        fi
+    else
+        info "平台未变更: ${LLM_PLATFORM}（将重建容器以确保配置同步）"
+    fi
 
     info "停止当前服务..."
     do_stop
