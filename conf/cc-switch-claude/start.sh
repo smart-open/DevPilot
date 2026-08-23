@@ -68,10 +68,42 @@ if [ -z "${ACTIVE_API_KEY}" ] || echo "${ACTIVE_API_KEY}" | grep -q "^your-"; th
     exit 1
 fi
 
-# 设置 ANTHROPIC 兼容变量（供 Claude Code fallback 使用）
+# 设置 ANTHROPIC 兼容变量（供 Claude Code 直接使用）
 export ANTHROPIC_BASE_URL="${ACTIVE_BASE_URL}"
 export ANTHROPIC_API_KEY="${ACTIVE_API_KEY}"
 export ANTHROPIC_MODEL="${ACTIVE_MODEL}"
+
+# 同时持久化到 Claude Code 配置文件，避免 CC-Switch Web UI 的 provider 切换在 v0.21.0 中
+# 因调用桌面端独占 API 而失败，导致 Claude Code 无法启动。
+CLAUDE_CONFIG_DIR="${HOME}/.claude"
+mkdir -p "${CLAUDE_CONFIG_DIR}"
+
+# 跳过首次联网登录验证（国内/第三方 API 必需）
+if [ ! -f "${HOME}/.claude.json" ]; then
+    cat > "${HOME}/.claude.json" <<'EOF'
+{
+  "hasCompletedOnboarding": true
+}
+EOF
+    echo "[start] 已生成 ~/.claude.json（跳过首次登录验证）"
+fi
+
+# Claude Code 全局 settings.json，直接指向当前激活的模型供应商
+# 注：CC-Switch Web UI 理论上可接管该文件，但 v0.21.0 Web Server 模式下
+#     "启用 Provider" 按钮会触发桌面端 invoke/check_env_conflicts 导致失败。
+#     此处预先生成，使 Claude Code 不依赖 CC-Switch UI 即可工作。
+CLAUDE_SETTINGS="${CLAUDE_CONFIG_DIR}/settings.json"
+cat > "${CLAUDE_SETTINGS}" <<EOF
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "${ACTIVE_BASE_URL}",
+    "ANTHROPIC_API_KEY": "${ACTIVE_API_KEY}",
+    "ANTHROPIC_MODEL": "${ACTIVE_MODEL}"
+  }
+}
+EOF
+echo "[start] 已生成 Claude Code 配置文件: ${CLAUDE_SETTINGS}"
+
 
 echo "[start] 大模型平台配置："
 echo "  - 平台:         ${LLM_PLATFORM}"
@@ -126,16 +158,25 @@ if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
 fi
 
 # ============================================================
-# 4. 根据 LLM_PLATFORM 自动配置 CC-Switch 供应商
+# 4. 向 CC-Switch 写入遗留快照（仅用于 Web UI 展示，不依赖它启用 provider）
 # ============================================================
 CC_SWITCH_DIR="${HOME}/.cc-switch"
 CC_SWITCH_CONFIG="${CC_SWITCH_DIR}/config.json"
 
 mkdir -p "${CC_SWITCH_DIR}"
 
-# 仅在配置文件不存在时写入，避免覆盖用户自定义配置
+# 说明：
+# - cc-switch-web v0.21.0 的运行时权威存储是 SQLite（~/.cc-switch/cc-switch.db），
+#   启动时若数据库为空，会从 ~/.cc-switch/config.json（遗留快照）导入。
+# - 但 v0.21.0 Web Server 模式下，Web UI 的 "启用 Provider" / Stream Check 会调用
+#   桌面端独占的 Tauri invoke / check_env_conflicts，导致
+#   "TypeError: Cannot read properties of undefined (reading 'invoke')" 与 501 报错。
+# - 因此本脚本已直接生成 Claude Code 的 ~/.claude/settings.json，Claude Code 不
+#   依赖 CC-Switch UI 启用即可工作。
+# - 以下 config.json 仅作为遗留快照写入，让 Web UI 能展示 provider 信息；如需真正
+#   通过 CC-Switch 路由使用，请改用其 REST API（见运维手册）。
 if [ ! -f "${CC_SWITCH_CONFIG}" ]; then
-    echo "[start] 初始化 ${ACTIVE_PROVIDER} 供应商配置 ..."
+    echo "[start] 写入 CC-Switch 遗留快照配置 ..."
 
     cat > "${CC_SWITCH_CONFIG}" <<EOF
 {
@@ -150,9 +191,9 @@ if [ ! -f "${CC_SWITCH_CONFIG}" ]; then
   "activeProvider": "${ACTIVE_PROVIDER}"
 }
 EOF
-    echo "[start] ${ACTIVE_PROVIDER} 供应商配置已写入 ${CC_SWITCH_CONFIG}"
+    echo "[start] 已写入 ${CC_SWITCH_CONFIG}（仅展示/导入用）"
 else
-    echo "[start] 已存在 CC-Switch 配置文件，跳过自动配置: ${CC_SWITCH_CONFIG}"
+    echo "[start] 已存在 CC-Switch 配置文件，跳过写入: ${CC_SWITCH_CONFIG}"
     echo "[start] 当前激活供应商: $(cat "${CC_SWITCH_CONFIG}" | grep activeProvider | sed 's/.*: "\(.*\)".*/\1/' 2>/dev/null || echo '未知')"
 fi
 
@@ -200,8 +241,12 @@ echo ""
 echo "  使用 Claude Code:"
 echo "    docker compose exec cc-switch-claude claude"
 echo ""
-echo "  ${ACTIVE_PROVIDER} 供应商已自动配置（见 ~/.cc-switch/config.json）"
-echo "    Claude Code 将通过 CC-Switch 使用 ${ACTIVE_PROVIDER} 供应商"
+echo "  Claude Code 直连配置已写入 ~/.claude/settings.json"
+echo "    Claude Code 将直接使用 ${ACTIVE_PROVIDER}（不依赖 CC-Switch UI 启用）"
+echo ""
+echo "  注意：CC-Switch Web UI v0.21.0 的 '启用 Provider' / Stream Check 按钮"
+echo "        在 Web Server 模式下会触发桌面端 API 导致报错（见运维手册说明）。"
+echo "        如需通过 CC-Switch 路由切换，请使用其 REST API 而非 Web UI 按钮。"
 echo ""
 echo "  自动部署: $( [ "${DEVPILOT_AUTO_DEPLOY}" = "true" ] && echo "已启用" || echo "未启用" )"
 echo ""
