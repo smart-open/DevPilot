@@ -178,6 +178,10 @@ services:
 
       # 服务自动部署
       - DEVPILOT_AUTO_DEPLOY=${DEVPILOT_AUTO_DEPLOY}
+
+      # 允许在 HTTP（非 TLS）下暴露 Basic/Bearer 凭证
+      # 容器仅运行在内部 bridge 网络，由宿主机反向代理终止 TLS 后对外暴露
+      - ALLOW_HTTP_BASIC_OVER_HTTP=1
     volumes:
       - ./workspace:/workspace
       - ./data/cc-switch-claude:/home/node

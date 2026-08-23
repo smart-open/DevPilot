@@ -104,7 +104,8 @@ echo "  - 模型 Provider: ${ACTIVE_PROVIDER}"
 echo "  - Redis: redis:6379"
 echo "========================================"
 
-exec openclaw gateway \
-    --bind lan \
-    --allow-unconfigured \
-    --config "${CONFIG_FILE}"
+# 注意：OpenClaw 的 lan 是 --bind 的取值（非子命令），gateway 子命令无 --config 选项。
+# 正确语法：openclaw gateway [run] --bind lan --allow-unconfigured
+# 配置由 OPENCLAW_HOME（=/data/openclaw）下的 openclaw.json 自动加载，无需 --config。
+# --token 显式兜底（默认值即 OPENCLAW_GATEWAY_TOKEN 环境变量），避免 bind=lan 因缺认证被拒。
+exec openclaw gateway --bind lan --allow-unconfigured --token "${OPENCLAW_GATEWAY_TOKEN}"
