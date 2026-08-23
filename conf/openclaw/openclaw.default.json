@@ -100,6 +100,6 @@
     }
   },
   "redis": {
-    "url": "redis://default:{{REDIS_PASSWORD}}@redis:6379"
+    "url": "redis://default:{{REDIS_PASSWORD}}@127.0.0.1:6379"
   }
 }

@@ -33,6 +33,10 @@ services:
       - TZ=${TZ}
     networks:
       - devpilot-network
+    # OpenClaw 使用 network_mode: host，需经宿主机回环访问 Redis，故在此发布 6379。
+    # 若该端口需对外暴露，请在宿主机防火墙仅放行可信来源。
+    ports:
+      - "6379:6379"
     logging: *default-logging
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
@@ -103,10 +107,11 @@ services:
     volumes:
       - ./data/openclaw:/data/openclaw
       - ./logs/openclaw:/logs
-    ports:
-      - "${OPENCLAW_GATEWAY_PORT}:18789"
-    networks:
-      - devpilot-network
+    # 关键：使用宿主机网络，使 OpenClaw gateway --bind lan 检测到 VM 真实网卡 IP
+    # （如 192.168.106.128）而非容器内网 172.x 地址；控制 UI 的 WebSocket 广播地址
+    # 因此变为 ws://<VM_IP>:18789，浏览器经 http(s)://<VM_IP>:18789 可同源直连。
+    # 注意：host 模式下不再需要 ports 映射（网关直接绑定宿主机端口）。
+    network_mode: "host"
     logging: *default-logging
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:18789/healthz"]

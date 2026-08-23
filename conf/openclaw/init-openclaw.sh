@@ -100,6 +100,13 @@ fi
 # 设为 true 放行（仅建议受信任内网 / 已套反向代理终止 TLS 的场景使用）。
 openclaw config set gateway.controlUi.allowInsecureAuth true 2>/dev/null || true
 
+# ---- 3.2 OpenClaw 现以 network_mode: host 运行，Redis 必须经宿主机回环访问 ----
+# 无论 openclaw.json 是本次新生成还是历史残留，均确保 redis 地址指向 127.0.0.1:6379，
+# 否则 openclaw 在 host 网络下无法解析 bridge 网络的 “redis” 主机名。
+if [ -f "${CONFIG_FILE}" ]; then
+    sed -i 's#@redis:6379#@127.0.0.1:6379#g' "${CONFIG_FILE}"
+fi
+
 # ---- 4. 安装飞书插件（WebSocket 长连接模式） ----
 echo "[init] 检查飞书插件 ..."
 if ! openclaw plugins list 2>/dev/null | grep -q "feishu"; then
