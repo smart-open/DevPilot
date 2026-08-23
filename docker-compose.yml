@@ -180,7 +180,7 @@ services:
       - DEVPILOT_AUTO_DEPLOY=${DEVPILOT_AUTO_DEPLOY}
 
       # CC-Switch Web 登录密码（可选；留空则由 cc-switch-web 自动生成并写入卷内 web_password 文件）
-      - CC_SWITCH_WEB_PASSWORD=${CC_SWITCH_WEB_PASSWORD}
+      - CC_SWITCH_WEB_PASSWORD=${CC_SWITCH_WEB_PASSWORD:-}
 
       # 允许在 HTTP（非 TLS）下暴露 Basic/Bearer 凭证
       # 容器仅运行在内部 bridge 网络，由宿主机反向代理终止 TLS 后对外暴露
