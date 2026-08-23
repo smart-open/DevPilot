@@ -149,6 +149,86 @@ mask_secret() {
     fi
 }
 
+# 打印部署后的访问凭据（OpenClaw Gateway Token / CC-Switch Web 密码）。
+# - OpenClaw Token 优先取 .env（非空 + 非占位符），否则从 data/openclaw/openclaw.json
+#   的 gateway.token 字段读取（容器自动生成场景）；
+# - 若 openclaw.json 读到了真实 token 且 .env 仍是占位符/缺失，会回写到 .env 以保持一致；
+# - CC-Switch 密码从 data/cc-switch-claude/.cc-switch/web_password 读取。
+print_credentials() {
+    local openclaw_token="" web_password="" token_source=""
+    local env_token tmp
+
+    # 1) OpenClaw Gateway Token
+    env_token="$(grep '^OPENCLAW_GATEWAY_TOKEN=' .env | cut -d'=' -f2-)"
+    if [ -n "${env_token}" ] && [ "${env_token}" != "change-me-to-secure-token" ]; then
+        openclaw_token="${env_token}"
+        token_source=".env"
+    elif [ -f "data/openclaw/openclaw.json" ]; then
+        # 从已生成的配置里读 gateway.token 字段（容器内 init-openclaw.sh 自动生成后写入）
+        openclaw_token="$(grep -E '"token"[[:space:]]*:' data/openclaw/openclaw.json \
+            | head -1 \
+            | sed -E 's/.*"token"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
+        if [ -n "${openclaw_token}" ]; then
+            token_source="data/openclaw/openclaw.json（容器内自动生成）"
+            # 回写到 .env，保持脚本间一致
+            if grep -q '^OPENCLAW_GATEWAY_TOKEN=' .env; then
+                tmp="$(mktemp 2>/dev/null || echo .env.tmp)"
+                sed "s|^OPENCLAW_GATEWAY_TOKEN=.*|OPENCLAW_GATEWAY_TOKEN=${openclaw_token}|" .env > "${tmp}"
+                mv "${tmp}" .env
+            fi
+        fi
+    fi
+    if [ -z "${openclaw_token}" ]; then
+        openclaw_token="（未获取到，请检查 data/openclaw/openclaw.json）"
+        token_source="未知"
+    fi
+
+    # 2) CC-Switch Web 密码
+    if [ -f "data/cc-switch-claude/.cc-switch/web_password" ]; then
+        web_password="$(cat data/cc-switch-claude/.cc-switch/web_password 2>/dev/null | tr -d '[:space:]')"
+    fi
+    if [ -z "${web_password}" ]; then
+        web_password="（未找到，请确认 cc-switch 容器已启动后查看 data/cc-switch-claude/.cc-switch/web_password）"
+    fi
+
+    # 控制台（带颜色）
+    print_separator
+    echo -e "${CYAN}  访问凭据  ${NC}"
+    print_separator
+    echo ""
+    echo -e "${CYAN}OpenClaw Gateway${NC}"
+    echo "  访问地址:        http://<VM_IP>:${GATEWAY_PORT}/"
+    echo "  本机访问:        http://localhost:${GATEWAY_PORT}/"
+    echo -e "  鉴权方式:        ${YELLOW}URL 末尾追加 #token=<token>${NC}"
+    echo "  Gateway Token:   ${openclaw_token}"
+    echo "  Token 来源:      ${token_source}"
+    echo ""
+    echo -e "${CYAN}CC-Switch Web${NC}"
+    echo "  访问地址:        http://<VM_IP>:${WEB_PORT}/"
+    echo "  本机访问:        http://localhost:${WEB_PORT}/"
+    echo "  用户名:          admin"
+    echo "  密码:            ${web_password}"
+    echo "  密码文件:        data/cc-switch-claude/.cc-switch/web_password"
+    echo ""
+    echo -e "${CYAN}飞书机器人${NC}"
+    echo "  在飞书中搜索机器人（AppID 见 .env FEISHU_APP_ID），发消息即获 AI 回复"
+    echo ""
+
+    # 同步写入日志文件（无颜色）
+    {
+        echo ""
+        echo "========== 访问凭据 =========="
+        echo "OpenClaw Gateway: http://<VM_IP>:${GATEWAY_PORT}/"
+        echo "  Token:       ${openclaw_token}"
+        echo "  Token来源:   ${token_source}"
+        echo "  URL鉴权:     在地址末尾追加 #token=<token>"
+        echo "CC-Switch Web:    http://<VM_IP>:${WEB_PORT}/"
+        echo "  用户名:      admin"
+        echo "  密码:        ${web_password}"
+        echo "  密码文件:    data/cc-switch-claude/.cc-switch/web_password"
+    } >> "${LOG_FILE}"
+}
+
 # ============================================================
 # 启动
 # ============================================================
@@ -484,6 +564,10 @@ echo "  1. 浏览器打开 http://localhost:${WEB_PORT}"
 echo "  2. 添加 agnes-ai 供应商（API Key 在 .env 文件中）"
 echo "  3. 启用 Claude Code takeover"
 echo ""
+
+# 打印本次部署生效的访问凭据（OpenClaw Token / CC-Switch Web 用户名密码）
+print_credentials
+
 echo -e "${YELLOW}部署日志: ${LOG_FILE}${NC}"
 echo ""
 echo "========================================"
