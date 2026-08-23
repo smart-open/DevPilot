@@ -549,7 +549,7 @@ K8s 部署统一采用 **Helm Chart 唯一方式**，不再提供 kubectl 原生
 |----------|------|--------|
 | `global.namespace` | 命名空间 | `devpilot` |
 | `global.tz` | 时区 | `Asia/Shanghai` |
-| `agnes.baseUrl` | agnes-ai API 地址 | `https://apihub.agnes-ai.com/v1` |
+| `agnes.baseUrl` | agnes-ai API 地址 | `https://api.agnes-ai.cn/v1` |
 | `agnes.apiKey` | agnes-ai API 密钥 | `your-agnes-api-key` |
 | `feishu.appId` | 飞书 App ID | `your-feishu-app-id` |
 | `feishu.appSecret` | 飞书 App Secret | `your-feishu-app-secret` |
@@ -582,7 +582,7 @@ helm install devpilot cicd/cd/k8s/helm/devpilot \
 cat > custom-values.yaml << 'EOF'
 agnes:
   apiKey: "sk-8TIy..."
-  baseUrl: "https://apihub.agnes-ai.com/v1"
+  baseUrl: "https://api.agnes-ai.cn/v1"
 feishu:
   appId: "cli_a962..."
   appSecret: "gsNus..."
@@ -734,7 +734,7 @@ bash cicd/service-deploy/deploy-service.sh --list
 | 变量名 | 说明 | 示例值 |
 |--------|------|--------|
 | `AGNES_API_KEY` | agnes-ai API 密钥 | `sk-8TIy...` |
-| `AGNES_BASE_URL` | agnes-ai API 地址 | `https://apihub.agnes-ai.com/v1` |
+| `AGNES_BASE_URL` | agnes-ai API 地址 | `https://api.agnes-ai.cn/v1` |
 | `FEISHU_APP_ID` | 飞书应用 App ID | `cli_a962...` |
 | `FEISHU_APP_SECRET` | 飞书应用 App Secret | `gsNus...` |
 | `REDIS_PASSWORD` | Redis 认证密码 | `DevPilotRedis2026Secure` |
