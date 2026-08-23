@@ -49,6 +49,15 @@ case "${LLM_PLATFORM}" in
 esac
 ACTIVE_DEFAULT_MODEL="${ACTIVE_PROVIDER}/${ACTIVE_MODEL}"
 
+# ---- 2.1 网关 Token 默认化 ----
+# 若未设置或仍为占位符 change-me-to-secure-token，则自动生成安全随机 Token，
+# 避免用户误用占位符导致“使用占位符 token 无法登录 / 不安全”。
+if [ -z "${OPENCLAW_GATEWAY_TOKEN}" ] || [ "${OPENCLAW_GATEWAY_TOKEN}" = "change-me-to-secure-token" ]; then
+    OPENCLAW_GATEWAY_TOKEN="$(openssl rand -hex 24 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || date +%s%N)"
+    echo "[init] 未检测到安全 Gateway Token，已自动生成随机 Token（请妥善保存，重新生成需清 data/openclaw/openclaw.json）"
+fi
+export OPENCLAW_GATEWAY_TOKEN
+
 # ---- 3. 首次启动：从模板创建配置 ----
 if [ ! -f "${CONFIG_FILE}" ]; then
     echo "[init] 首次启动，从模板生成 openclaw.json（平台: ${ACTIVE_PROVIDER}）..."
@@ -84,6 +93,12 @@ if [ ! -f "${CONFIG_FILE}" ]; then
 else
     echo "[init] openclaw.json 已存在，跳过生成"
 fi
+
+# ---- 3.1 确保 Web UI 允许 HTTP 明文访问（虚拟机 / 局域网浏览器访问场景）----
+# 浏览器经 http://<VM_IP>:18789 访问时，controlUi 默认要求安全认证，
+# 会拦截 WebSocket 握手，表现为“浏览器无法完成 Gateway 连接”。
+# 设为 true 放行（仅建议受信任内网 / 已套反向代理终止 TLS 的场景使用）。
+openclaw config set gateway.controlUi.allowInsecureAuth true 2>/dev/null || true
 
 # ---- 4. 安装飞书插件（WebSocket 长连接模式） ----
 echo "[init] 检查飞书插件 ..."

@@ -243,6 +243,7 @@ docker run -d \
     -e "ANTHROPIC_API_KEY=${ACTIVE_API_KEY}" \
     -e "ANTHROPIC_MODEL=${ACTIVE_MODEL}" \
     -e "DEVPILOT_AUTO_DEPLOY=${DEVPILOT_AUTO_DEPLOY:-false}" \
+    -e "CC_SWITCH_WEB_PASSWORD=${CC_SWITCH_WEB_PASSWORD}" \
     -e "ALLOW_HTTP_BASIC_OVER_HTTP=1" \
     -v "${PROJECT_ROOT}/workspace:/workspace" \
     -v "${PROJECT_ROOT}/data/cc-switch-claude:/home/node" \

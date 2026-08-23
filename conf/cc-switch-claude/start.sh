@@ -90,6 +90,16 @@ echo "  - Web UI 端口: ${PORT:-8890}"
 echo "  - 绑定地址: ${HOST:-0.0.0.0}"
 echo "  - Home 目录: ${HOME}"
 
+# ---- 2.0 若设置了 CC_SWITCH_WEB_PASSWORD，则覆盖默认生成的 Web 登录密码 ----
+# cc-switch-web 采用 file-based credentials（首次运行自动生成 ~/.cc-switch/web_password）。
+# 本段在启动前将环境变量指定的密码写入该文件，从而支持从 .env 统一管理 Web 登录密码。
+CC_SWITCH_DIR="${HOME}/.cc-switch"
+if [ -n "${CC_SWITCH_WEB_PASSWORD}" ]; then
+    mkdir -p "${CC_SWITCH_DIR}"
+    printf '%s' "${CC_SWITCH_WEB_PASSWORD}" > "${CC_SWITCH_DIR}/web_password"
+    echo "[start] 已使用环境变量 CC_SWITCH_WEB_PASSWORD 设置 Web 登录密码"
+fi
+
 cc-switch-web &
 CC_SWITCH_PID=$!
 echo "[start] CC-Switch Web PID: ${CC_SWITCH_PID}"

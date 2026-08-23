@@ -84,9 +84,13 @@
   },
   "gateway": {
     "enabled": true,
+    "bind": "lan",
     "token": "{{OPENCLAW_GATEWAY_TOKEN}}",
     "deviceAuth": false,
-    "port": 18789
+    "port": 18789,
+    "controlUi": {
+      "allowInsecureAuth": true
+    }
   },
   "channels": {
     "feishu": {
