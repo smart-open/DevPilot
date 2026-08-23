@@ -192,7 +192,9 @@ services:
       - devpilot-network
     logging: *default-logging
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://127.0.0.1:${CC_SWITCH_WEB_PORT}"]
+      # CC-Switch Web 启用 file-based credentials，未鉴权访问 / 返回 401 属正常“已就绪”态；
+      # 故以“HTTP 服务已响应（curl -s，连接失败才判非就绪）”为健康判据，不能用 -f（4xx 判失败）。
+      test: ["CMD", "curl", "-s", "-o", "/dev/null", "http://127.0.0.1:${CC_SWITCH_WEB_PORT}"]
       interval: 30s
       timeout: 10s
       retries: 3

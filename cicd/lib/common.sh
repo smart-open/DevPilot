@@ -160,8 +160,12 @@ wait_for_http() {
 
     info "等待 ${name} 就绪 ..."
     while [ ${count} -lt ${max} ]; do
-        if curl -sf "${url}" >/dev/null 2>&1; then
-            success "${name} 已就绪"
+        # CC-Switch Web 等鉴权服务对未登录请求返回 401，属正常“已就绪”态；
+        # 故以“HTTP 服务已响应（状态码非 000/空）”为就绪判据，而非要求 2xx。
+        local code
+        code=$(curl -s -o /dev/null -w "%{http_code}" "${url}" 2>/dev/null)
+        if [ -n "${code}" ] && [ "${code}" != "000" ]; then
+            success "${name} 已就绪 (HTTP ${code})"
             return 0
         fi
         count=$((count + 1))

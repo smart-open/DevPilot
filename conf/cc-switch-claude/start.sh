@@ -101,7 +101,9 @@ echo "[start] 等待 CC-Switch Web 就绪 ..."
 MAX_RETRIES=30
 RETRY_COUNT=0
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if curl -sf "http://127.0.0.1:${PORT:-8890}" >/dev/null 2>&1; then
+    # CC-Switch Web 需登录（file-based credentials），未鉴权访问返回 401 属正常；
+    # 用 curl -s（仅连接失败才判非就绪），不能用 -f（4xx 会被判失败）。
+    if curl -s "http://127.0.0.1:${PORT:-8890}" >/dev/null 2>&1; then
         echo "[start] CC-Switch Web 已就绪"
         break
     fi

@@ -99,7 +99,7 @@ health: ## 健康检查所有服务
 	@printf "OpenClaw:  "
 	@curl -sf http://localhost:$$(grep OPENCLAW_GATEWAY_PORT .env | cut -d= -f2)/healthz >/dev/null 2>&1 && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
 	@printf "CC-Switch: "
-	@curl -sf http://localhost:$$(grep CC_SWITCH_WEB_PORT .env | cut -d= -f2) >/dev/null 2>&1 && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
+	@curl -s http://localhost:$$(grep CC_SWITCH_WEB_PORT .env | cut -d= -f2) >/dev/null 2>&1 && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
 	@printf "Claude:    "
 	@$(COMPOSE) exec -T cc-switch-claude claude --version 2>/dev/null && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
 
