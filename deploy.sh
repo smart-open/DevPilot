@@ -63,6 +63,82 @@ step_end() {
     echo ""
 }
 
+# 以 root 权限执行（已是 root 直接运行，否则尝试 sudo）
+run_root() {
+    if [ "$(id -u)" -eq 0 ]; then
+        "$@"
+    elif command -v sudo &>/dev/null; then
+        sudo "$@"
+    else
+        warn "需要 root 权限执行: $*（当前非 root 且无 sudo，跳过）"
+        return 1
+    fi
+}
+
+# 等待 Docker 守护进程就绪（最多约 60s）
+wait_for_docker() {
+    local i tries=30
+    for ((i=1; i<=tries; i++)); do
+        if docker info &>/dev/null; then
+            return 0
+        fi
+        sleep 2
+    done
+    return 1
+}
+
+# 部署前网络自愈（修复“DOCKER iptables 链缺失 / 孤儿网桥”导致的网络创建失败）：
+# 1) 删除残留 devpilot-network（幂等）
+# 2) 删除无对应 docker 网络的孤儿 br-* 网桥
+# 3) 若 nat 表 DOCKER 链缺失，重启 Docker 守护进程以重建
+preflight_network_cleanup() {
+    local NETWORK_NAME="devpilot-network"
+    local br short out rc
+    local check_file; check_file="$(mktemp 2>/dev/null || echo /tmp/.devpilot_ipt_check)"
+
+    # 1) 删除可能残留的自定义网络（幂等，不存在则跳过）
+    if docker network ls --format '{{.Name}}' 2>/dev/null | grep -qx "${NETWORK_NAME}"; then
+        detail "删除残留网络: ${NETWORK_NAME}"
+        docker network rm "${NETWORK_NAME}" 2>/dev/null || true
+    fi
+
+    # 2) 删除孤儿网桥（br-<12hex> 且没有任何 docker 网络 ID 以其为前缀）
+    for br in $(ip -o link show 2>/dev/null | grep -oE 'br-[a-f0-9]{12}' | sort -u); do
+        short="${br#br-}"
+        if ! docker network ls -q 2>/dev/null | grep -q "^${short}"; then
+            detail "删除孤儿网桥: ${br}"
+            run_root ip link delete "${br}" 2>/dev/null || true
+        fi
+    done
+
+    # 3) 检查 DOCKER iptables 链，缺失则重启 Docker 守护进程重建
+    if run_root sh -c 'iptables -t nat -L DOCKER -n' >/dev/null 2>"${check_file}"; then
+        detail "Docker DOCKER iptables 链正常"
+    else
+        out="$(cat "${check_file}" 2>/dev/null)"
+        if echo "${out}" | grep -qiE "no chain|not exist|No chain/target"; then
+            warn "检测到 Docker DOCKER iptables 链缺失，重启 Docker 守护进程以重建..."
+            if run_root systemctl restart docker 2>/dev/null \
+                || run_root service docker restart 2>/dev/null; then
+                if wait_for_docker; then
+                    success "Docker 守护进程已重启，DOCKER 链重建完成"
+                else
+                    error "Docker 守护进程重启后仍无法就绪，请检查 Docker 服务状态"
+                    rm -f "${check_file}"
+                    return 1
+                fi
+            else
+                error "无法重启 Docker 守护进程，请手动执行: sudo systemctl restart docker"
+                rm -f "${check_file}"
+                return 1
+            fi
+        else
+            warn "无法确认 DOCKER 链状态（${out}）；若部署仍报 DOCKER 链错误，请手动 sudo systemctl restart docker"
+        fi
+    fi
+    rm -f "${check_file}"
+}
+
 # 敏感信息掩码
 mask_secret() {
     local val="$1"
@@ -293,6 +369,10 @@ detail "  .dockerignore:          已启用"
 
 info "开始构建镜像（首次构建需 5-10 分钟）..."
 echo ""
+
+# 前置网络自愈清理（修复 DOCKER iptables 链缺失 / 孤儿网桥导致的网络创建失败）
+info "前置网络清理（自愈检查）..."
+preflight_network_cleanup || warn "前置网络清理未完全成功，若部署仍报 DOCKER iptables 链错误，请参考运维操作手册 § 网络与 iptables 排障"
 
 BUILD_START=$SECONDS
 docker compose up -d --build 2>&1 | while IFS= read -r line; do
