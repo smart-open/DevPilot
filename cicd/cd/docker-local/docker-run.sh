@@ -144,8 +144,17 @@ docker run -d \
     --network "${NETWORK_NAME}" \
     --network-alias openclaw \
     -e "TZ=${TZ}" \
+    -e "LLM_PLATFORM=${LLM_PLATFORM}" \
     -e "AGNES_API_KEY=${AGNES_API_KEY}" \
     -e "AGNES_BASE_URL=${AGNES_BASE_URL}" \
+    -e "DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}" \
+    -e "DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL}" \
+    -e "GLM_API_KEY=${GLM_API_KEY}" \
+    -e "GLM_BASE_URL=${GLM_BASE_URL}" \
+    -e "ARK_API_KEY=${ARK_API_KEY}" \
+    -e "ARK_BASE_URL=${ARK_BASE_URL}" \
+    -e "BAILIAN_API_KEY=${BAILIAN_API_KEY}" \
+    -e "BAILIAN_BASE_URL=${BAILIAN_BASE_URL}" \
     -e "OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}" \
     -e "OPENCLAW_GATEWAY_PORT=${OPENCLAW_GATEWAY_PORT}" \
     -e "FEISHU_APP_ID=${FEISHU_APP_ID}" \
@@ -169,8 +178,46 @@ echo -e "${CYAN}  启动容器 3/3：CC-Switch + Claude Code${NC}"
 echo -e "${CYAN}========================================${NC}"
 info "启动 CC-Switch+Claude 容器 ..."
 
-# 处理可选的 AGNES_MODEL 变量（.env.example 中有 AGNES_MODEL_FLASH）
-AGNES_MODEL_VALUE="${AGNES_MODEL_FLASH:-agnes-2.5-flash}"
+# 根据 LLM_PLATFORM 解析当前平台配置（与 start.sh / llm-init.sh 保持一致）
+case "${LLM_PLATFORM:-agnes}" in
+    agnes)
+        ACTIVE_PROVIDER="agnes-ai"
+        ACTIVE_BASE_URL="${AGNES_BASE_URL:-https://api.agnes-ai.cn/v1}"
+        ACTIVE_API_KEY="${AGNES_API_KEY}"
+        ACTIVE_MODEL="${AGNES_MODEL:-agnes-2.5-flash}"
+        ;;
+    deepseek)
+        ACTIVE_PROVIDER="deepseek"
+        ACTIVE_BASE_URL="${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}"
+        ACTIVE_API_KEY="${DEEPSEEK_API_KEY}"
+        ACTIVE_MODEL="${DEEPSEEK_MODEL:-DeepSeek-V4-Flash}"
+        ;;
+    glm)
+        ACTIVE_PROVIDER="glm"
+        ACTIVE_BASE_URL="${GLM_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}"
+        ACTIVE_API_KEY="${GLM_API_KEY}"
+        ACTIVE_MODEL="${GLM_MODEL:-GLM-5.2}"
+        ;;
+    ark)
+        ACTIVE_PROVIDER="ark"
+        ACTIVE_BASE_URL="${ARK_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}"
+        ACTIVE_API_KEY="${ARK_API_KEY}"
+        ACTIVE_MODEL="${ARK_MODEL:-doubao-seed-2.1-turbo}"
+        ;;
+    bailian)
+        ACTIVE_PROVIDER="bailian"
+        ACTIVE_BASE_URL="${BAILIAN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}"
+        ACTIVE_API_KEY="${BAILIAN_API_KEY}"
+        ACTIVE_MODEL="${BAILIAN_MODEL:-Qwen3.7-Plus}"
+        ;;
+    *)
+        echo "[warn] 未知 LLM_PLATFORM=${LLM_PLATFORM}，回退到 agnes"
+        ACTIVE_PROVIDER="agnes-ai"
+        ACTIVE_BASE_URL="${AGNES_BASE_URL:-https://api.agnes-ai.cn/v1}"
+        ACTIVE_API_KEY="${AGNES_API_KEY}"
+        ACTIVE_MODEL="${AGNES_MODEL:-agnes-2.5-flash}"
+        ;;
+esac
 
 docker run -d \
     --name devpilot-cc-switch-claude \
@@ -181,11 +228,20 @@ docker run -d \
     -e "HOME=/home/node" \
     -e "PORT=${CC_SWITCH_WEB_PORT}" \
     -e "HOST=0.0.0.0" \
+    -e "LLM_PLATFORM=${LLM_PLATFORM}" \
     -e "AGNES_BASE_URL=${AGNES_BASE_URL}" \
     -e "AGNES_API_KEY=${AGNES_API_KEY}" \
-    -e "ANTHROPIC_BASE_URL=${AGNES_BASE_URL}" \
-    -e "ANTHROPIC_API_KEY=${AGNES_API_KEY}" \
-    -e "ANTHROPIC_MODEL=${AGNES_MODEL_VALUE}" \
+    -e "DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL}" \
+    -e "DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}" \
+    -e "GLM_BASE_URL=${GLM_BASE_URL}" \
+    -e "GLM_API_KEY=${GLM_API_KEY}" \
+    -e "ARK_BASE_URL=${ARK_BASE_URL}" \
+    -e "ARK_API_KEY=${ARK_API_KEY}" \
+    -e "BAILIAN_BASE_URL=${BAILIAN_BASE_URL}" \
+    -e "BAILIAN_API_KEY=${BAILIAN_API_KEY}" \
+    -e "ANTHROPIC_BASE_URL=${ACTIVE_BASE_URL}" \
+    -e "ANTHROPIC_API_KEY=${ACTIVE_API_KEY}" \
+    -e "ANTHROPIC_MODEL=${ACTIVE_MODEL}" \
     -e "DEVPILOT_AUTO_DEPLOY=${DEVPILOT_AUTO_DEPLOY:-false}" \
     -v "${PROJECT_ROOT}/workspace:/workspace" \
     -v "${PROJECT_ROOT}/data/cc-switch-claude:/home/node" \

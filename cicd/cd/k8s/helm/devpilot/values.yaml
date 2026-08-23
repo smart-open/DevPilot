@@ -18,10 +18,12 @@ global:
   # 时区
   tz: "Asia/Shanghai"
 
-# ---- agnes-ai 大模型配置 ----
+# ---- 大模型平台配置 ----
+# DevPilot 运行时支持 5 个 OpenAI 兼容平台：agnes（国内 .cn 域名）、deepseek、glm、ark、bailian
+# 通过 LLM_PLATFORM 切换；此处 agnes 为默认国内供应商配置
 agnes:
-  # API 地址
-  baseUrl: "https://apihub.agnes-ai.com/v1"
+  # API 地址（Agnes AI 为国内服务，域名后缀为 .cn）
+  baseUrl: "https://api.agnes-ai.cn/v1"
   # API 密钥（敏感，建议通过 --set 或外部 Secret 注入）
   apiKey: "your-agnes-api-key"
   # 模型名称
