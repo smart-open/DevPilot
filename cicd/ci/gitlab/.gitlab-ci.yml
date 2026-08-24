@@ -32,14 +32,13 @@ default:
 variables:
   NODE_IMAGE_TAG: "22.23.1-bookworm"
   OPENCLAW_VERSION: "2026.7.1-2"
-  CC_SWITCH_VERSION: "v0.21.0"
   CLAUDE_CODE_VERSION: "2.1.220"
   # Docker-in-Docker 配置
   DOCKER_DRIVER: overlay2
   DOCKER_TLS_CERTDIR: "/certs"
   # GitLab 镜像仓库前缀（使用内置 CI_REGISTRY_IMAGE 变量）
   IMAGE_OPENCLAW: "${CI_REGISTRY_IMAGE}/openclaw"
-  IMAGE_CC_SWITCH_CLAUDE: "${CI_REGISTRY_IMAGE}/devpilot-claude"
+  IMAGE_DEVPIOT_CLAUDE: "${CI_REGISTRY_IMAGE}/devpilot-claude"
   # 镜像缓存配置
   GIT_DEPTH: "1"
 
@@ -113,7 +112,7 @@ lint:env-template:
   script:
     - echo "==> 检查 .env.example 变量完整性 ..."
     - |
-      REQUIRED_VARS="AGNES_API_KEY AGNES_BASE_URL FEISHU_APP_ID FEISHU_APP_SECRET REDIS_PASSWORD OPENCLAW_GATEWAY_TOKEN OPENCLAW_GATEWAY_PORT CC_SWITCH_WEB_PORT NODE_IMAGE_TAG OPENCLAW_VERSION CC_SWITCH_VERSION CLAUDE_CODE_VERSION TZ"
+      REQUIRED_VARS="AGNES_API_KEY AGNES_BASE_URL FEISHU_APP_ID FEISHU_APP_SECRET REDIS_PASSWORD OPENCLAW_GATEWAY_TOKEN OPENCLAW_GATEWAY_PORT NODE_IMAGE_TAG OPENCLAW_VERSION CLAUDE_CODE_VERSION TZ"
       for var in $REQUIRED_VARS; do
         if grep -q "^${var}=" .env.example; then
           echo "  [OK] ${var}"
@@ -163,22 +162,20 @@ build:devpilot-claude:
   stage: build
   needs: ["lint:shell-scripts", "lint:dockerfiles", "lint:compose", "lint:env-template"]
   script:
-    - echo "==> 构建 CC-Switch+Claude 镜像 ..."
+    - echo "==> 构建 devpilot-claude 镜像 ..."
     - export DOCKER_BUILDKIT=1
     - |
       docker build \
-        --build-arg CC_SWITCH_VERSION=${CC_SWITCH_VERSION} \
         --build-arg CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION} \
         --build-arg NODE_IMAGE_TAG=${NODE_IMAGE_TAG} \
-        --cache-from type=registry,ref=${IMAGE_CC_SWITCH_CLAUDE}:buildcache \
-        --cache-to type=registry,ref=${IMAGE_CC_SWITCH_CLAUDE}:buildcache,mode=max \
-        -t ${IMAGE_CC_SWITCH_CLAUDE}:${CC_SWITCH_VERSION} \
-        -t ${IMAGE_CC_SWITCH_CLAUDE}:latest \
-        -t ${IMAGE_CC_SWITCH_CLAUDE}:${CI_COMMIT_SHORT_SHA} \
+        --cache-from type=registry,ref=${IMAGE_DEVPIOT_CLAUDE}:buildcache \
+        --cache-to type=registry,ref=${IMAGE_DEVPIOT_CLAUDE}:buildcache,mode=max \
+        -t ${IMAGE_DEVPIOT_CLAUDE}:latest \
+        -t ${IMAGE_DEVPIOT_CLAUDE}:${CI_COMMIT_SHORT_SHA} \
         -f dockerfiles/devpilot-claude/Dockerfile \
         .
-    - echo "  [OK] CC-Switch+Claude 镜像构建完成"
-    - docker save ${IMAGE_CC_SWITCH_CLAUDE}:${CI_COMMIT_SHORT_SHA} -o devpilot-claude-image.tar
+    - echo "  [OK] devpilot-claude 镜像构建完成"
+    - docker save ${IMAGE_DEVPIOT_CLAUDE}:${CI_COMMIT_SHORT_SHA} -o devpilot-claude-image.tar
   artifacts:
     paths:
       - devpilot-claude-image.tar
@@ -213,13 +210,12 @@ push:devpilot-claude:
   script:
     - echo "==> 登录 GitLab 镜像仓库 ..."
     - docker login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
-    - echo "==> 加载 CC-Switch+Claude 镜像 ..."
+    - echo "==> 加载 devpilot-claude 镜像 ..."
     - docker load -i devpilot-claude-image.tar
-    - echo "==> 推送 CC-Switch+Claude 镜像 ..."
-    - docker push ${IMAGE_CC_SWITCH_CLAUDE}:${CC_SWITCH_VERSION}
-    - docker push ${IMAGE_CC_SWITCH_CLAUDE}:latest
-    - docker push ${IMAGE_CC_SWITCH_CLAUDE}:${CI_COMMIT_SHORT_SHA}
-    - echo "  [OK] CC-Switch+Claude 镜像推送完成"
+    - echo "==> 推送 devpilot-claude 镜像 ..."
+    - docker push ${IMAGE_DEVPIOT_CLAUDE}:latest
+    - docker push ${IMAGE_DEVPIOT_CLAUDE}:${CI_COMMIT_SHORT_SHA}
+    - echo "  [OK] devpilot-claude 镜像推送完成"
   rules:
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
 
@@ -262,16 +258,16 @@ scan:devpilot-claude:
     TRIVY_NO_PROGRESS: "true"
     TRIVY_CACHE_DIR: "/trivy-cache"
   script:
-    - echo "==> Trivy 扫描 CC-Switch+Claude 镜像 ..."
+    - echo "==> Trivy 扫描 devpilot-claude 镜像 ..."
     - docker load -i devpilot-claude-image.tar
-    - trivy image --severity CRITICAL,HIGH --exit-code 0 --format json --output trivy-cc-switch-report.json ${IMAGE_CC_SWITCH_CLAUDE}:${CI_COMMIT_SHORT_SHA}
-    - trivy image --severity CRITICAL,HIGH --exit-code 0 --format table ${IMAGE_CC_SWITCH_CLAUDE}:${CI_COMMIT_SHORT_SHA}
-    - echo "  [OK] CC-Switch+Claude 镜像扫描完成"
+    - trivy image --severity CRITICAL,HIGH --exit-code 0 --format json --output trivy-devpilot-claude-report.json ${IMAGE_DEVPIOT_CLAUDE}:${CI_COMMIT_SHORT_SHA}
+    - trivy image --severity CRITICAL,HIGH --exit-code 0 --format table ${IMAGE_DEVPIOT_CLAUDE}:${CI_COMMIT_SHORT_SHA}
+    - echo "  [OK] devpilot-claude 镜像扫描完成"
   artifacts:
     reports:
-      secret_detection: trivy-cc-switch-report.json
+      secret_detection: trivy-devpilot-claude-report.json
     paths:
-      - trivy-cc-switch-report.json
+      - trivy-devpilot-claude-report.json
     expire_in: 7 days
   allow_failure: true
   rules:
