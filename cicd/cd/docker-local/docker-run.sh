@@ -85,16 +85,15 @@ docker build \
     .
 success "OpenClaw 镜像构建完成"
 
-info "构建 CC-Switch+Claude 镜像 ..."
+info "构建 devpilot-claude 镜像 ..."
 docker build \
-    --build-arg "CC_SWITCH_VERSION=${CC_SWITCH_VERSION}" \
     --build-arg "CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION}" \
     --build-arg "NODE_IMAGE_TAG=${NODE_IMAGE_TAG}" \
     -t devpilot-claude:latest \
-    -t "devpilot-claude:${CC_SWITCH_VERSION}" \
+    -t "devpilot-claude:${CLAUDE_CODE_VERSION}" \
     -f dockerfiles/devpilot-claude/Dockerfile \
     .
-success "CC-Switch+Claude 镜像构建完成"
+success "devpilot-claude 镜像构建完成"
 
 # ============================================================
 # 6. 清理旧容器（幂等：存在则删除后重建）
@@ -226,8 +225,6 @@ docker run -d \
     --network-alias devpilot-claude \
     -e "TZ=${TZ}" \
     -e "HOME=/home/node" \
-    -e "PORT=${CC_SWITCH_WEB_PORT}" \
-    -e "HOST=0.0.0.0" \
     -e "LLM_PLATFORM=${LLM_PLATFORM}" \
     -e "AGNES_BASE_URL=${AGNES_BASE_URL}" \
     -e "AGNES_API_KEY=${AGNES_API_KEY}" \
@@ -243,19 +240,14 @@ docker run -d \
     -e "ANTHROPIC_API_KEY=${ACTIVE_API_KEY}" \
     -e "ANTHROPIC_MODEL=${ACTIVE_MODEL}" \
     -e "DEVPILOT_AUTO_DEPLOY=${DEVPILOT_AUTO_DEPLOY:-false}" \
-    -e "CC_SWITCH_WEB_PASSWORD=${CC_SWITCH_WEB_PASSWORD}" \
     -e "ALLOW_HTTP_BASIC_OVER_HTTP=1" \
     -v "${PROJECT_ROOT}/workspace:/workspace" \
     -v "${PROJECT_ROOT}/data/devpilot-claude:/home/node" \
     -v "${PROJECT_ROOT}/logs/devpilot-claude:/logs" \
-    -p "${CC_SWITCH_WEB_PORT}:${CC_SWITCH_WEB_PORT}" \
     -i -t \
     devpilot-claude:latest
 
-success "CC-Switch+Claude 容器已启动 (端口 ${CC_SWITCH_WEB_PORT})"
-
-# 等待 CC-Switch Web 就绪
-wait_for_http "CC-Switch Web" "http://127.0.0.1:${CC_SWITCH_WEB_PORT}" || true
+success "devpilot-claude 容器已启动"
 
 # ============================================================
 # 10. 输出部署结果
@@ -272,7 +264,8 @@ docker ps --filter "name=devpilot-" --format "table {{.Names}}\t{{.Status}}\t{{.
 echo ""
 echo -e "${CYAN}访问地址：${NC}"
 echo -e "  OpenClaw Gateway:  http://localhost:${OPENCLAW_GATEWAY_PORT}/healthz"
-echo -e "  CC-Switch Web UI: http://localhost:${CC_SWITCH_WEB_PORT}"
+echo -e "  Claude Code:      docker exec -it devpilot-claude claude"
+echo -e "  litellm 代理:      http://localhost:4000/health/liveliness"
 echo ""
 echo -e "${CYAN}常用命令：${NC}"
 echo -e "  查看日志:     docker logs -f devpilot-openclaw"
