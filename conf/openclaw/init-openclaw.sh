@@ -263,6 +263,28 @@ if [ -z "${FEISHU_APP_ID}" ] || [ -z "${FEISHU_APP_SECRET}" ] || \
     echo "[warn] 请在 .env 填入飞书开放平台的 App ID 与 App Secret 后重新 'sh deploy.sh'。"
 fi
 
+# ---- 3.7.1 启动前配置校验与自愈（防止 Invalid config 触发无限重启循环）----
+# 2026.7.1-2 对 openclaw.json 做严格 schema 校验，任意非法字段（如顶层多余 key、gateway 子字段类型不符）
+# 都会让网关启动即 Invalid config，进而触发 restart-loop breaker 无限重启刷屏。
+# 此处启动前主动校验：校验未通过则尝试 openclaw doctor --fix 自愈，并把详细错误打到日志，
+# 便于排障，而不是让容器在崩溃循环里空转。
+if command -v openclaw >/dev/null 2>&1; then
+    if openclaw config validate >/tmp/oc_validate.log 2>&1; then
+        echo "[init] 配置校验通过 ✓"
+    else
+        echo "[init] 配置校验未通过，尝试 openclaw doctor --fix 自愈…"
+        sed -n '1,40p' /tmp/oc_validate.log 2>/dev/null || true
+        if openclaw doctor --fix >/tmp/oc_doctor.log 2>&1; then
+            echo "[init] 已执行 openclaw doctor --fix，重新校验…"
+            openclaw config validate 2>&1 | head -40 || true
+        else
+            echo "[warn] doctor --fix 未能修复（退出非零）。当前 openclaw.json 顶层或 gateway 字段可能不符合 2026.7.1-2 schema；"
+            echo "[warn] 详细错误见 /tmp/oc_doctor.log，请人工核查 openclaw.json 顶层 / gateway 字段后重试。"
+            sed -n '1,40p' /tmp/oc_doctor.log 2>/dev/null || true
+        fi
+    fi
+fi
+
 # ---- 3.8 启动前配置自检（便于排障，凭据做掩码；用 node 读文件，避免依赖 config get）----
 echo "[init] 配置自检:"
 if [ -f "${CONFIG_FILE}" ] && command -v node >/dev/null 2>&1; then
