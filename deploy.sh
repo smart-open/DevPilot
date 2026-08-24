@@ -149,13 +149,13 @@ mask_secret() {
     fi
 }
 
-# 打印部署后的访问凭据（OpenClaw Gateway Token / CC-Switch Web 密码）。
+# 打印部署后的访问凭据（OpenClaw Gateway Token）。
 # - OpenClaw Token 优先取 .env（非空 + 非占位符），否则从 data/openclaw/.openclaw/openclaw.json
 #   的 gateway.token 字段读取（容器自动生成场景）；
-# - 若 openclaw.json 读到了真实 token 且 .env 仍是占位符/缺失，会回写到 .env 以保持一致；
-# - CC-Switch 密码从 data/devpilot-claude/.cc-switch/web_password 读取。
+# - 若 openclaw.json 读到了真实 token 且 .env 仍是占位符/缺失，会回写到 .env 以保持一致。
+# - cc-switch-web v0.21.0 已移除（不适合 headless 容器），主路由由 devpilot-litellm 承担。
 print_credentials() {
-    local openclaw_token="" web_password="" token_source=""
+    local openclaw_token="" token_source=""
     local env_token tmp
 
     # 1) OpenClaw Gateway Token
@@ -183,14 +183,6 @@ print_credentials() {
         token_source="未知"
     fi
 
-    # 2) CC-Switch Web 密码
-    if [ -f "data/devpilot-claude/.cc-switch/web_password" ]; then
-        web_password="$(cat data/devpilot-claude/.cc-switch/web_password 2>/dev/null | tr -d '[:space:]')"
-    fi
-    if [ -z "${web_password}" ]; then
-        web_password="（未找到，请确认 cc-switch 容器已启动后查看 data/devpilot-claude/.cc-switch/web_password）"
-    fi
-
     # 控制台（带颜色）
     print_separator
     echo -e "${CYAN}  访问凭据  ${NC}"
@@ -203,15 +195,13 @@ print_credentials() {
     echo "  Gateway Token:   ${openclaw_token}"
     echo "  Token 来源:      ${token_source}"
     echo ""
-    echo -e "${CYAN}CC-Switch Web${NC}"
-    echo "  访问地址:        http://<VM_IP>:${WEB_PORT}/"
-    echo "  本机访问:        http://localhost:${WEB_PORT}/"
-    echo "  用户名:          admin"
-    echo "  密码:            ${web_password}"
-    echo "  密码文件:        data/devpilot-claude/.cc-switch/web_password"
-    echo ""
     echo -e "${CYAN}飞书机器人${NC}"
     echo "  在飞书中搜索机器人（AppID 见 .env FEISHU_APP_ID），发消息即获 AI 回复"
+    echo ""
+    echo -e "${CYAN}Claude Code（devpilot-claude 容器）${NC}"
+    echo "  使用方式:        docker compose exec devpilot-claude claude"
+    echo "  LLM 路由:        通过 devpilot-litellm（http://litellm:4000）"
+    echo "  配置:            ANTHROPIC_BASE_URL=http://litellm:4000（容器内 ~/.claude/settings.json）"
     echo ""
 
     # 同步写入日志文件（无颜色）
@@ -222,10 +212,8 @@ print_credentials() {
         echo "  Token:       ${openclaw_token}"
         echo "  Token来源:   ${token_source}"
         echo "  URL鉴权:     在地址末尾追加 #token=<token>"
-        echo "CC-Switch Web:    http://<VM_IP>:${WEB_PORT}/"
-        echo "  用户名:      admin"
-        echo "  密码:        ${web_password}"
-        echo "  密码文件:    data/devpilot-claude/.cc-switch/web_password"
+        echo "Claude Code:     docker compose exec devpilot-claude claude"
+        echo "  LLM 路由:   http://litellm:4000（devpilot-litellm 代理）"
     } >> "${LOG_FILE}"
 }
 
@@ -298,11 +286,10 @@ else
     warn "Make 未安装（可选，安装后可用 make 命令快捷操作）"
 fi
 
-# 网络端口检查
+# 网络端口检查（仅 OpenClaw Gateway 端口；cc-switch-web v0.21.0 已移除）
 detail "检查端口占用..."
 GATEWAY_PORT_CHECK=$(grep "^OPENCLAW_GATEWAY_PORT=" .env 2>/dev/null | cut -d'=' -f2 || echo "18789")
-WEB_PORT_CHECK=$(grep "^CC_SWITCH_WEB_PORT=" .env 2>/dev/null | cut -d'=' -f2 || echo "8890")
-for port in "${GATEWAY_PORT_CHECK}" "${WEB_PORT_CHECK}"; do
+for port in "${GATEWAY_PORT_CHECK}"; do
     if command -v ss &>/dev/null; then
         if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
             warn "端口 ${port} 已被占用"
@@ -381,7 +368,7 @@ if [ -f "versions.env" ]; then
     source versions.env
     detail "  Node.js:       ${NODE_IMAGE_TAG}"
     detail "  OpenClaw:      ${OPENCLAW_VERSION}"
-    detail "  CC-Switch:     ${CC_SWITCH_VERSION}"
+    detail "  Claude Code:   ${CLAUDE_CODE_VERSION}"
     detail "  Claude Code:   ${CLAUDE_CODE_VERSION}"
 fi
 
@@ -419,7 +406,7 @@ check_env_var "FEISHU_APP_SECRET"      "飞书 App Secret"      "secret" || ENV_
 check_env_var "REDIS_PASSWORD"         "Redis 密码"           "secret" || ENV_ERRORS=$((ENV_ERRORS + 1))
 check_env_var "OPENCLAW_GATEWAY_TOKEN" "Gateway Token"        "secret" || ENV_ERRORS=$((ENV_ERRORS + 1))
 check_env_var "OPENCLAW_GATEWAY_PORT"  "Gateway 端口"         ""       || ENV_ERRORS=$((ENV_ERRORS + 1))
-check_env_var "CC_SWITCH_WEB_PORT"     "CC-Switch Web 端口"   ""       || ENV_ERRORS=$((ENV_ERRORS + 1))
+# CC_SWITCH_WEB_PORT 已移除（cc-switch-web v0.21.0 不再部署）
 check_env_var "TZ"                     "时区"                 ""       || ENV_ERRORS=$((ENV_ERRORS + 1))
 
 if [ ${ENV_ERRORS} -gt 0 ]; then

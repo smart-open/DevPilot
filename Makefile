@@ -98,15 +98,15 @@ health: ## 健康检查所有服务
 	@$(COMPOSE) exec -T redis redis-cli -a "$$(grep REDIS_PASSWORD .env | cut -d= -f2)" ping 2>/dev/null && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
 	@printf "OpenClaw:  "
 	@curl -sf http://localhost:$$(grep OPENCLAW_GATEWAY_PORT .env | cut -d= -f2)/healthz >/dev/null 2>&1 && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
-	@printf "CC-Switch: "
-	@curl -s http://localhost:$$(grep CC_SWITCH_WEB_PORT .env | cut -d= -f2) >/dev/null 2>&1 && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
+	@printf "litellm:   "
+	@curl -sf http://localhost:4000/health/liveliness >/dev/null 2>&1 && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
 	@printf "Claude:    "
 	@$(COMPOSE) exec -T devpilot-claude claude --version 2>/dev/null && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
 
 ##@ 容器交互
 
 .PHONY: shell
-shell: ## 进入 CC-Switch+Claude 容器 bash
+shell: ## 进入 Claude 容器 bash
 	$(COMPOSE) exec devpilot-claude bash
 
 .PHONY: claude
