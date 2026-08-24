@@ -155,30 +155,66 @@ if [ -f "${CONFIG_FILE}" ]; then
     fi
 fi
 
-# ---- 3.5 确保 feishu 插件被显式信任 ----
+# ---- 3.5 确保 feishu 插件被显式信任（官方 CLI，最可靠；每次启动幂等）----
 # OpenClaw v2026.7.x 安全策略要求：非 bundled 插件必须在 plugins.allow 中显式声明，
-# 否则仅会被 discover 并“可能自动加载”，控制 UI 显示 not configured / 无法编辑 accounts。
-# 此处用 node 对现有配置做幂等补丁（容器基于 node 镜像，node 一定可用）。
+# 否则仅“discovered”状态，控制 UI 显示 not configured / 无法编辑 accounts。
+# 优先用 openclaw config set（OpenClaw 自带写入器，保证 schema 合法）；失败再回退 node 直接改 JSON。
+if [ -f "${CONFIG_FILE}" ]; then
+    if ! openclaw config set plugins.allow '["feishu"]' 2>/dev/null; then
+        if command -v node >/dev/null 2>&1; then
+            node -e "
+                const fs = require('fs');
+                const path = '${CONFIG_FILE}';
+                const cfg = JSON.parse(fs.readFileSync(path, 'utf8'));
+                if (!cfg.plugins) cfg.plugins = {};
+                if (!Array.isArray(cfg.plugins.allow)) cfg.plugins.allow = [];
+                if (!cfg.plugins.allow.includes('feishu')) {
+                    cfg.plugins.allow.push('feishu');
+                    fs.writeFileSync(path, JSON.stringify(cfg, null, 2) + '\n');
+                    console.log('[init] 已将 feishu 加入 plugins.allow（node 回退）');
+                }
+            " 2>/dev/null || echo "[warn] plugins.allow 补丁失败，请检查 ${CONFIG_FILE}"
+        fi
+    fi
+fi
+
+# ---- 3.6 每次启动同步 .env 飞书凭据到配置（解决“改了 .env 重部署不生效”）----
+# openclaw.json 已存在时，section 3 的模板生成会被跳过，故此处显式用最新 .env 覆盖凭据。
+if [ -f "${CONFIG_FILE}" ]; then
+    if [ -n "${FEISHU_APP_ID}" ] && [ "${FEISHU_APP_ID}" != "your-feishu-app-id" ]; then
+        openclaw config set channels.feishu.accounts.main.appId "${FEISHU_APP_ID}" 2>/dev/null || true
+    fi
+    if [ -n "${FEISHU_APP_SECRET}" ] && [ "${FEISHU_APP_SECRET}" != "your-feishu-app-secret" ]; then
+        openclaw config set channels.feishu.accounts.main.appSecret "${FEISHU_APP_SECRET}" 2>/dev/null || true
+    fi
+    openclaw config set channels.feishu.accounts.main.botName "${FEISHU_BOT_NAME}" 2>/dev/null || true
+fi
+
+# ---- 3.7 飞书凭据空值告警 ----
+# 若 .env 未填写真实 FEISHU_APP_ID/FEISHU_APP_SECRET，频道即使配置正确也无法启动。
+if [ -z "${FEISHU_APP_ID}" ] || [ -z "${FEISHU_APP_SECRET}" ] || \
+   [ "${FEISHU_APP_ID}" = "your-feishu-app-id" ] || [ "${FEISHU_APP_SECRET}" = "your-feishu-app-secret" ]; then
+    echo "[warn] FEISHU_APP_ID / FEISHU_APP_SECRET 未填写真实值，飞书频道将保持未配置（not configured）。"
+    echo "[warn] 请在 .env 填入飞书开放平台的 App ID 与 App Secret 后重新 'sh deploy.sh'。"
+fi
+
+# ---- 3.8 启动前配置自检（便于排障，凭据做掩码；用 node 读文件，避免依赖 config get）----
+echo "[init] 配置自检:"
 if [ -f "${CONFIG_FILE}" ] && command -v node >/dev/null 2>&1; then
     node -e "
         const fs = require('fs');
-        const path = '${CONFIG_FILE}';
-        const cfg = JSON.parse(fs.readFileSync(path, 'utf8'));
-        if (!cfg.plugins) cfg.plugins = {};
-        if (!Array.isArray(cfg.plugins.allow)) cfg.plugins.allow = [];
-        if (!cfg.plugins.allow.includes('feishu')) {
-            cfg.plugins.allow.push('feishu');
-            fs.writeFileSync(path, JSON.stringify(cfg, null, 2) + '\n');
-            console.log('[init] 已将 feishu 加入 plugins.allow');
-        }
-    " 2>/dev/null || echo "[warn] plugins.allow 补丁失败，请检查 ${CONFIG_FILE}"
-fi
-
-# ---- 3.6 飞书凭据空值告警 ----
-# 若 .env 未填写 FEISHU_APP_ID/FEISHU_APP_SECRET，频道即使配置正确也无法启动。
-if [ -z "${FEISHU_APP_ID}" ] || [ -z "${FEISHU_APP_SECRET}" ]; then
-    echo "[warn] FEISHU_APP_ID 或 FEISHU_APP_SECRET 为空，飞书频道将保持未配置状态。"
-    echo "[warn] 请在 .env 中填写后重新执行 'sh deploy.sh'。"
+        const c = JSON.parse(fs.readFileSync('${CONFIG_FILE}', 'utf8'));
+        const bind = (c.gateway && c.gateway.bind) || '未知';
+        const allow = (c.plugins && Array.isArray(c.plugins.allow)) ? c.plugins.allow.join(',') : '未知(空)';
+        const acct = c.channels && c.channels.feishu && c.channels.feishu.accounts && c.channels.feishu.accounts.main;
+        const appId = acct && acct.appId ? acct.appId : '';
+        const appIdMask = appId.length > 6 ? appId.slice(0,6) + '***' : (appId || '⚠️ 空');
+        console.log('  - Gateway bind:    ' + bind);
+        console.log('  - plugins.allow:   ' + allow);
+        console.log('  - 飞书 App ID:     ' + appIdMask + (appId && appId.indexOf('your-feishu') === 0 ? '（占位符未替换）' : ''));
+    " 2>/dev/null || echo "  - 自检失败（不影响启动）"
+else
+    echo "  - 跳过（node 不可用或配置文件缺失）"
 fi
 
 # ---- 4. 安装/启用飞书插件（WebSocket 长连接模式） ----
