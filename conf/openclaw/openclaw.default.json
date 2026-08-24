@@ -1,86 +1,92 @@
 {
   "version": "0.0.1",
   "language": "zh-CN",
-  "ai": {
-    "provider": "{{ACTIVE_PROVIDER}}",
+  "models": {
+    "mode": "merge",
     "providers": {
       "agnes": {
-        "type": "openai",
         "baseUrl": "{{AGNES_BASE_URL}}",
         "apiKey": "{{AGNES_API_KEY}}",
         "api": "openai-completions",
         "models": [
           {
-            "name": "agnes-2.5-flash",
+            "id": "agnes-2.5-flash",
+            "name": "Agnes 2.5 Flash",
             "contextWindow": 256000,
             "maxTokens": 8192
           },
           {
-            "name": "agnes-image-2.1-flash",
+            "id": "agnes-image-2.1-flash",
+            "name": "Agnes Image 2.1 Flash",
             "contextWindow": 4096,
             "maxTokens": 4096
           },
           {
-            "name": "agnes-video-v2.0",
+            "id": "agnes-video-v2.0",
+            "name": "Agnes Video 2.0",
             "contextWindow": 4096,
             "maxTokens": 4096
           }
         ]
       },
       "deepseek": {
-        "type": "openai",
         "baseUrl": "{{DEEPSEEK_BASE_URL}}",
         "apiKey": "{{DEEPSEEK_API_KEY}}",
         "api": "openai-completions",
         "models": [
           {
-            "name": "DeepSeek-V4-Flash",
+            "id": "DeepSeek-V4-Flash",
+            "name": "DeepSeek V4 Flash",
             "contextWindow": 128000,
             "maxTokens": 8192
           }
         ]
       },
       "glm": {
-        "type": "openai",
         "baseUrl": "{{GLM_BASE_URL}}",
         "apiKey": "{{GLM_API_KEY}}",
         "api": "openai-completions",
         "models": [
           {
-            "name": "GLM-5.2",
+            "id": "GLM-5.2",
+            "name": "GLM 5.2",
             "contextWindow": 128000,
             "maxTokens": 8192
           }
         ]
       },
       "ark": {
-        "type": "openai",
         "baseUrl": "{{ARK_BASE_URL}}",
         "apiKey": "{{ARK_API_KEY}}",
         "api": "openai-completions",
         "models": [
           {
-            "name": "doubao-seed-2.1-turbo",
+            "id": "doubao-seed-2.1-turbo",
+            "name": "Doubao Seed 2.1 Turbo",
             "contextWindow": 256000,
             "maxTokens": 8192
           }
         ]
       },
       "bailian": {
-        "type": "openai",
         "baseUrl": "{{BAILIAN_BASE_URL}}",
         "apiKey": "{{BAILIAN_API_KEY}}",
         "api": "openai-completions",
         "models": [
           {
-            "name": "Qwen3.7-Plus",
+            "id": "Qwen3.7-Plus",
+            "name": "Qwen 3.7 Plus",
             "contextWindow": 128000,
             "maxTokens": 8192
           }
         ]
       }
-    },
-    "defaultModel": "{{ACTIVE_DEFAULT_MODEL}}"
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": "{{ACTIVE_DEFAULT_MODEL}}"
+    }
   },
   "gateway": {
     "enabled": true,
