@@ -68,18 +68,21 @@ if [ -z "${ACTIVE_API_KEY}" ] || echo "${ACTIVE_API_KEY}" | grep -q "^your-"; th
     exit 1
 fi
 
-# 推导 Claude Code 专用的 Anthropic Messages 兼容端点
-# 关键：Claude Code 走 Anthropic Messages API，请求路径固定为 ${BASE}/v1/messages；
-# 而上游 OpenAI 端点（ACTIVE_BASE_URL）已含 /v1 等路径后缀（OpenAI 客户端直接拼 /chat/completions）。
-# 若直接复用 ACTIVE_BASE_URL，Claude Code 会打到 .../v1/v1/messages → 404 → 报“模型不存在/无权限”。
-# 因此必须剥离 /v1、/v3、/v4、/compatible-mode/v1 等后缀，使拼出的路径正确。
-# 仅 agnes 原生提供 Anthropic Messages 兼容端点（已验证 https://api.agnes-ai.cn/v1/messages 返回 401 路由存在）。
-ACTIVE_ANTHROPIC_BASE_URL="$(echo "${ACTIVE_BASE_URL}" | sed -E 's#/compatible-mode/v1/?$##; s#/v[0-9]+/?$##')"
+# Claude Code 通过本地 litellm 代理访问各平台（复刻 CC-Switch 官方"本地路由"）：
+#   litellm 暴露 Anthropic Messages 端点（/v1/messages），并翻译成 OpenAI Chat Completions
+#   转发给各平台 OpenAI 兼容端点。因此 deepseek/glm/ark/bailian 等无原生 Anthropic 端点的
+#   平台也能被 Claude Code 使用（之前的直连方式仅 agnes 可用）。
+# 代理地址与鉴权密钥必须与 docker-compose 的 litellm 服务完全一致：
+#   - ANTHROPIC_BASE_URL = http://litellm:4000   （compose 服务名，同 devpilot-network）
+#   - ANTHROPIC_API_KEY  = LITELLM_MASTER_KEY     （litellm general_settings.master_key）
+#   - ANTHROPIC_MODEL     = <platform>/<model>     （与 litellm 注册的 model_name 对应）
+LITELLM_PROXY_URL="${LITELLM_PROXY_URL:-http://litellm:4000}"
+LITELLM_AUTH_KEY="${LITELLM_MASTER_KEY:-sk-devpilot-litellm}"
+LLM_PLATFORM_LC="$(echo "${LLM_PLATFORM}" | tr '[:upper:]' '[:lower:]')"
 
-# 设置 ANTHROPIC 兼容变量（供 Claude Code 直接使用）
-export ANTHROPIC_BASE_URL="${ACTIVE_ANTHROPIC_BASE_URL}"
-export ANTHROPIC_API_KEY="${ACTIVE_API_KEY}"
-export ANTHROPIC_MODEL="${ACTIVE_MODEL}"
+export ANTHROPIC_BASE_URL="${LITELLM_PROXY_URL}"
+export ANTHROPIC_API_KEY="${LITELLM_AUTH_KEY}"
+export ANTHROPIC_MODEL="${LLM_PLATFORM_LC}/${ACTIVE_MODEL}"
 
 # 同时持久化到 Claude Code 配置文件，避免 CC-Switch Web UI 的 provider 切换在 v0.21.0 中
 # 因调用桌面端独占 API 而失败，导致 Claude Code 无法启动。
@@ -104,9 +107,9 @@ CLAUDE_SETTINGS="${CLAUDE_CONFIG_DIR}/settings.json"
 cat > "${CLAUDE_SETTINGS}" <<EOF
 {
   "env": {
-    "ANTHROPIC_BASE_URL": "${ACTIVE_ANTHROPIC_BASE_URL}",
-    "ANTHROPIC_API_KEY": "${ACTIVE_API_KEY}",
-    "ANTHROPIC_MODEL": "${ACTIVE_MODEL}"
+    "ANTHROPIC_BASE_URL": "${LITELLM_PROXY_URL}",
+    "ANTHROPIC_API_KEY": "${LITELLM_AUTH_KEY}",
+    "ANTHROPIC_MODEL": "${LLM_PLATFORM_LC}/${ACTIVE_MODEL}"
   }
 }
 EOF
@@ -242,15 +245,15 @@ echo "    浏览器访问 http://localhost:${PORT:-8890}"
 echo "    默认用户名: admin"
 echo "    密码: ${WEB_PASSWORD}"
 echo ""
-echo "  Claude Code 直连模式 (fallback):"
+echo "  Claude Code 经 litellm 代理访问 (复刻 CC-Switch 本地路由):"
 echo "    ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL}"
 echo "    ANTHROPIC_MODEL=${ANTHROPIC_MODEL}"
 echo ""
 echo "  使用 Claude Code:"
 echo "    docker compose exec cc-switch-claude claude"
 echo ""
-echo "  Claude Code 直连配置已写入 ~/.claude/settings.json"
-echo "    Claude Code 将直接使用 ${ACTIVE_PROVIDER}（不依赖 CC-Switch UI 启用）"
+echo "  Claude Code 配置已写入 ~/.claude/settings.json"
+echo "    Claude Code 通过 litellm(http://litellm:4000) 路由到 ${ACTIVE_PROVIDER}（OpenAI Chat Completions）"
 echo ""
 echo "  注意：CC-Switch Web UI v0.21.0 的 '启用 Provider' / Stream Check 按钮"
 echo "        在 Web Server 模式下会触发桌面端 API 导致报错（见运维手册说明）。"
