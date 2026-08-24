@@ -210,7 +210,6 @@ openclaw:
   gatewayToken: "${OPENCLAW_GATEWAY_TOKEN}"
   gatewayPort: ${OPENCLAW_GATEWAY_PORT}
 ccSwitchClaude:
-  webPort: ${CC_SWITCH_WEB_PORT}
   autoDeploy: "${DEVPILOT_AUTO_DEPLOY:-false}"
 global:
   tz: "${TZ}"
@@ -272,7 +271,6 @@ health_check_docker() {
 
     # CC-Switch Web（从宿主机访问 Web 端口）
     if docker ps --format '{{.Names}}' | grep -q "devpilot-claude"; then
-        wait_for_http "CC-Switch Web" "http://127.0.0.1:${CC_SWITCH_WEB_PORT}" 3 2 || true
     else
         warn "CC-Switch Web: 容器未运行"
     fi
@@ -335,7 +333,8 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 echo -e "${CYAN}访问地址：${NC}"
 echo -e "  OpenClaw Gateway:  http://localhost:${OPENCLAW_GATEWAY_PORT}/healthz"
-echo -e "  CC-Switch Web UI:  http://localhost:${CC_SWITCH_WEB_PORT}"
+echo -e "  Claude Code:       docker exec -it devpilot-claude claude"
+  echo -e "  litellm 代理:      http://localhost:4000/health/liveliness"
 echo ""
 echo -e "${CYAN}下一步：${NC}"
 echo -e "  1. 浏览器访问 CC-Switch Web UI（agnes-ai 供应商已自动配置）"

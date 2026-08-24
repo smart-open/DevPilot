@@ -74,7 +74,7 @@ echo -e "${CYAN}========================================${NC}"
 echo -e "${CYAN}  构建 3 个容器：${NC}"
 echo -e "${CYAN}  1. Redis (redis:8.8.1-alpine, 端口 6379)${NC}"
 echo -e "${CYAN}  2. OpenClaw (端口 ${OPENCLAW_GATEWAY_PORT})${NC}"
-echo -e "${CYAN}  3. CC-Switch+Claude (端口 ${CC_SWITCH_WEB_PORT})${NC}"
+echo -e "${CYAN}  3. devpilot-claude (Claude Code 容器)${NC}"
 echo -e "${CYAN}========================================${NC}"
 
 # 使用 docker compose 构建（--build 强制重新构建镜像）
@@ -89,7 +89,6 @@ info "等待服务健康就绪 ..."
 
 wait_for_redis "devpilot-redis" "${REDIS_PASSWORD}" || true
 wait_for_container_http "devpilot-openclaw" "18789" "/healthz" 40 3 || true
-wait_for_http "CC-Switch Web" "http://127.0.0.1:${CC_SWITCH_WEB_PORT}" || true
 
 # ============================================================
 # 6. 输出部署状态
@@ -107,7 +106,8 @@ docker compose ps
 echo ""
 echo -e "${CYAN}访问地址：${NC}"
 echo -e "  OpenClaw Gateway:  http://localhost:${OPENCLAW_GATEWAY_PORT}/healthz"
-echo -e "  CC-Switch Web UI: http://localhost:${CC_SWITCH_WEB_PORT}"
+echo -e "  Claude Code:      docker exec -it devpilot-claude claude"
+    echo -e "  litellm 代理:      http://localhost:4000/health/liveliness"
 echo ""
 echo -e "${CYAN}常用命令：${NC}"
 echo -e "  查看日志:     docker compose logs -f"

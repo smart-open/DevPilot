@@ -255,7 +255,6 @@ else
 
     info "在远程构建 CC-Switch+Claude 镜像 ..."
     docker build \
-        --build-arg "CC_SWITCH_VERSION=${CC_SWITCH_VERSION}" \
         --build-arg "CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION}" \
         --build-arg "NODE_IMAGE_TAG=${NODE_IMAGE_TAG}" \
         -t devpilot-claude:latest \
@@ -311,7 +310,6 @@ else
         --network-alias devpilot-claude \
         -e "TZ=${TZ}" \
         -e "HOME=/home/node" \
-        -e "PORT=${CC_SWITCH_WEB_PORT}" \
         -e "HOST=0.0.0.0" \
         -e "AGNES_BASE_URL=${AGNES_BASE_URL}" \
         -e "AGNES_API_KEY=${AGNES_API_KEY}" \
@@ -319,7 +317,6 @@ else
         -e "ANTHROPIC_API_KEY=${AGNES_API_KEY}" \
         -e "ANTHROPIC_MODEL=${AGNES_MODEL_VALUE}" \
         -e "DEVPILOT_AUTO_DEPLOY=${DEVPILOT_AUTO_DEPLOY:-false}" \
-        -p "${CC_SWITCH_WEB_PORT}:${CC_SWITCH_WEB_PORT}" \
         -i -t \
         devpilot-claude:latest
     success "远程 CC-Switch+Claude 容器已启动"
@@ -339,7 +336,6 @@ wait_for_redis "devpilot-redis" "${REDIS_PASSWORD}" || true
 wait_for_container_http "devpilot-openclaw" "18789" "/healthz" 40 3 || true
 
 # CC-Switch Web 健康检查
-wait_for_http "CC-Switch Web" "http://127.0.0.1:${CC_SWITCH_WEB_PORT}" || true
 
 # ============================================================
 # 8. 输出部署结果
@@ -360,10 +356,11 @@ echo ""
 REMOTE_ADDR=$(echo "${DOCKER_HOST}" | sed 's|.*://||; s|/.*||; s|:.*||')
 echo -e "${CYAN}远程访问地址（替换为实际远程 IP）：${NC}"
 echo -e "  OpenClaw Gateway:  http://${REMOTE_ADDR}:${OPENCLAW_GATEWAY_PORT}/healthz"
-echo -e "  CC-Switch Web UI: http://${REMOTE_ADDR}:${CC_SWITCH_WEB_PORT}"
+echo -e "  Claude Code:       docker exec -it devpilot-claude claude"
+    echo -e "  litellm 代理:      http://${REMOTE_ADDR}:4000/health/liveliness"
 echo ""
 echo -e "${CYAN}注意：${NC}"
 echo -e "  - 远程部署不挂载本地 conf 目录（redis.conf 等），Redis 使用命令行参数配置"
 echo -e "  - 如需远程持久化数据，请在远程主机手动创建 data/ logs/ 目录并挂载"
-echo -e "  - 确保远程防火墙开放 ${OPENCLAW_GATEWAY_PORT} 和 ${CC_SWITCH_WEB_PORT} 端口"
+echo -e "  - 确保远程防火墙开放 ${OPENCLAW_GATEWAY_PORT} 和 4000 (litellm) 端口"
 echo ""
