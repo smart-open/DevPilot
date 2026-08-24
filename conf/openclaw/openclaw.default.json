@@ -93,6 +93,7 @@
     }
   },
   "plugins": {
+    "allow": ["feishu"],
     "entries": {
       "feishu": {
         "enabled": true

@@ -155,6 +155,32 @@ if [ -f "${CONFIG_FILE}" ]; then
     fi
 fi
 
+# ---- 3.5 确保 feishu 插件被显式信任 ----
+# OpenClaw v2026.7.x 安全策略要求：非 bundled 插件必须在 plugins.allow 中显式声明，
+# 否则仅会被 discover 并“可能自动加载”，控制 UI 显示 not configured / 无法编辑 accounts。
+# 此处用 node 对现有配置做幂等补丁（容器基于 node 镜像，node 一定可用）。
+if [ -f "${CONFIG_FILE}" ] && command -v node >/dev/null 2>&1; then
+    node -e "
+        const fs = require('fs');
+        const path = '${CONFIG_FILE}';
+        const cfg = JSON.parse(fs.readFileSync(path, 'utf8'));
+        if (!cfg.plugins) cfg.plugins = {};
+        if (!Array.isArray(cfg.plugins.allow)) cfg.plugins.allow = [];
+        if (!cfg.plugins.allow.includes('feishu')) {
+            cfg.plugins.allow.push('feishu');
+            fs.writeFileSync(path, JSON.stringify(cfg, null, 2) + '\n');
+            console.log('[init] 已将 feishu 加入 plugins.allow');
+        }
+    " 2>/dev/null || echo "[warn] plugins.allow 补丁失败，请检查 ${CONFIG_FILE}"
+fi
+
+# ---- 3.6 飞书凭据空值告警 ----
+# 若 .env 未填写 FEISHU_APP_ID/FEISHU_APP_SECRET，频道即使配置正确也无法启动。
+if [ -z "${FEISHU_APP_ID}" ] || [ -z "${FEISHU_APP_SECRET}" ]; then
+    echo "[warn] FEISHU_APP_ID 或 FEISHU_APP_SECRET 为空，飞书频道将保持未配置状态。"
+    echo "[warn] 请在 .env 中填写后重新执行 'sh deploy.sh'。"
+fi
+
 # ---- 4. 安装/启用飞书插件（WebSocket 长连接模式） ----
 # OpenClaw 新版已内置 bundled Feishu；旧版仍需手动安装。此处做兼容处理：
 # 若 plugins list 中无 feishu 相关条目则尝试安装，失败也不阻塞启动。
