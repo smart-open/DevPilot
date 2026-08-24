@@ -55,6 +55,8 @@ services:
   # OpenClaw：飞书 AI 机器人 + 多平台大模型对接
   # ============================================================
   openclaw:
+    # 显式 image: 避免 docker compose 自动用 '<项目目录名>-<服务名>' 拼出 'devpilot-devpilot-openclaw'（多前缀）
+    image: devpilot-openclaw:latest
     build:
       context: .
       dockerfile: dockerfiles/openclaw/Dockerfile
@@ -133,6 +135,8 @@ services:
   # CC-Switch + Claude Code：合体容器
   # ============================================================
   devpilot-claude:
+    # 显式 image: 避免 docker compose 自动用 '<项目目录名>-<服务名>' 拼出 'devpilot-devpilot-claude'（多前缀）
+    image: devpilot-claude:latest
     build:
       context: .
       dockerfile: dockerfiles/devpilot-claude/Dockerfile
@@ -216,6 +220,8 @@ services:
   # 生成 /app/litellm_config.yaml，Claude Code 通过 http://litellm:4000 访问。
   # ============================================================
   litellm:
+    # 显式 image: 避免 docker compose 自动用 '<项目目录名>-<服务名>' 拼出 'devpilot-devpilot-litellm'（多前缀）
+    image: devpilot-litellm:latest
     build:
       context: .
       dockerfile: dockerfiles/litellm/Dockerfile
