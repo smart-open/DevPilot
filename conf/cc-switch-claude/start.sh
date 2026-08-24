@@ -68,8 +68,16 @@ if [ -z "${ACTIVE_API_KEY}" ] || echo "${ACTIVE_API_KEY}" | grep -q "^your-"; th
     exit 1
 fi
 
+# 推导 Claude Code 专用的 Anthropic Messages 兼容端点
+# 关键：Claude Code 走 Anthropic Messages API，请求路径固定为 ${BASE}/v1/messages；
+# 而上游 OpenAI 端点（ACTIVE_BASE_URL）已含 /v1 等路径后缀（OpenAI 客户端直接拼 /chat/completions）。
+# 若直接复用 ACTIVE_BASE_URL，Claude Code 会打到 .../v1/v1/messages → 404 → 报“模型不存在/无权限”。
+# 因此必须剥离 /v1、/v3、/v4、/compatible-mode/v1 等后缀，使拼出的路径正确。
+# 仅 agnes 原生提供 Anthropic Messages 兼容端点（已验证 https://api.agnes-ai.cn/v1/messages 返回 401 路由存在）。
+ACTIVE_ANTHROPIC_BASE_URL="$(echo "${ACTIVE_BASE_URL}" | sed -E 's#/compatible-mode/v1/?$##; s#/v[0-9]+/?$##')"
+
 # 设置 ANTHROPIC 兼容变量（供 Claude Code 直接使用）
-export ANTHROPIC_BASE_URL="${ACTIVE_BASE_URL}"
+export ANTHROPIC_BASE_URL="${ACTIVE_ANTHROPIC_BASE_URL}"
 export ANTHROPIC_API_KEY="${ACTIVE_API_KEY}"
 export ANTHROPIC_MODEL="${ACTIVE_MODEL}"
 
@@ -96,7 +104,7 @@ CLAUDE_SETTINGS="${CLAUDE_CONFIG_DIR}/settings.json"
 cat > "${CLAUDE_SETTINGS}" <<EOF
 {
   "env": {
-    "ANTHROPIC_BASE_URL": "${ACTIVE_BASE_URL}",
+    "ANTHROPIC_BASE_URL": "${ACTIVE_ANTHROPIC_BASE_URL}",
     "ANTHROPIC_API_KEY": "${ACTIVE_API_KEY}",
     "ANTHROPIC_MODEL": "${ACTIVE_MODEL}"
   }
