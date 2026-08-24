@@ -117,7 +117,7 @@ services:
     network_mode: "host"
     logging: *default-logging
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:18789/healthz"]
+      test: ["CMD", "claude", "--version"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -137,7 +137,6 @@ services:
       context: .
       dockerfile: dockerfiles/devpilot-claude/Dockerfile
       args:
-        CC_SWITCH_VERSION: ${CC_SWITCH_VERSION:-v0.21.0}
         CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.241}
         NODE_IMAGE_TAG: ${NODE_IMAGE_TAG}
     container_name: devpilot-claude
@@ -180,17 +179,10 @@ services:
       - BAILIAN_API_KEY=${BAILIAN_API_KEY}
       - BAILIAN_BASE_URL=${BAILIAN_BASE_URL}
       - BAILIAN_MODEL=${BAILIAN_MODEL}
-
-      # CC-Switch Web 配置
-      - PORT=${CC_SWITCH_WEB_PORT}
-      - HOST=0.0.0.0
       - HOME=/home/node
 
       # 服务自动部署
       - DEVPILOT_AUTO_DEPLOY=${DEVPILOT_AUTO_DEPLOY}
-
-      # CC-Switch Web 登录密码（可选；留空则由 cc-switch-web 自动生成并写入卷内 web_password 文件）
-      - CC_SWITCH_WEB_PASSWORD=${CC_SWITCH_WEB_PASSWORD:-}
 
       # 允许在 HTTP（非 TLS）下暴露 Basic/Bearer 凭证
       # 容器仅运行在内部 bridge 网络，由宿主机反向代理终止 TLS 后对外暴露
@@ -199,15 +191,12 @@ services:
       - ./workspace:/workspace
       - ./data/devpilot-claude:/home/node
       - ./logs/devpilot-claude:/logs
-    ports:
-      - "${CC_SWITCH_WEB_PORT}:${CC_SWITCH_WEB_PORT}"
     networks:
       - devpilot-network
     logging: *default-logging
     healthcheck:
-      # CC-Switch Web 启用 file-based credentials，未鉴权访问 / 返回 401 属正常“已就绪”态；
-      # 故以“HTTP 服务已响应（curl -s，连接失败才判非就绪）”为健康判据，不能用 -f（4xx 判失败）。
-      test: ["CMD", "curl", "-s", "-o", "/dev/null", "http://127.0.0.1:${CC_SWITCH_WEB_PORT}"]
+      # Claude Code CLI 健康检查
+      test: ["CMD", "claude", "--version"]
       interval: 30s
       timeout: 10s
       retries: 3

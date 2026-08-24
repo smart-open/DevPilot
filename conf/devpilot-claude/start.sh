@@ -2,10 +2,11 @@
 set -e
 
 # ============================================================
-# CC-Switch + Claude Code 合体容器启动脚本
+# Claude Code 合体容器启动脚本
 # 根据 LLM_PLATFORM 环境变量动态配置大模型供应商
 # 支持：agnes、deepseek、glm、ark、bailian
-# 所有平台均走 OpenAI Chat Completion 协议
+# 通过本地 litellm 代理（http://litellm:4000）暴露 Anthropic Messages 端点，
+# 翻译成 OpenAI Chat Completions 转发给各平台。
 # ============================================================
 
 echo "========================================"
@@ -125,100 +126,6 @@ echo "  - API Key:      $(echo "${ACTIVE_API_KEY}" | sed 's/\(.\{8\}\).*/\1.../'
 echo "  - 协议:         OpenAI Chat Completion"
 echo ""
 
-# ============================================================
-# 2. 启动 CC-Switch Web（后台）
-# ============================================================
-echo "[start] 启动 CC-Switch Web ..."
-echo "  - Web UI 端口: ${PORT:-8890}"
-echo "  - 绑定地址: ${HOST:-0.0.0.0}"
-echo "  - Home 目录: ${HOME}"
-
-# ---- 2.0 若设置了 CC_SWITCH_WEB_PASSWORD，则覆盖默认生成的 Web 登录密码 ----
-# cc-switch-web 采用 file-based credentials（首次运行自动生成 ~/.cc-switch/web_password）。
-# 本段在启动前将环境变量指定的密码写入该文件，从而支持从 .env 统一管理 Web 登录密码。
-CC_SWITCH_DIR="${HOME}/.cc-switch"
-if [ -n "${CC_SWITCH_WEB_PASSWORD}" ]; then
-    mkdir -p "${CC_SWITCH_DIR}"
-    printf '%s' "${CC_SWITCH_WEB_PASSWORD}" > "${CC_SWITCH_DIR}/web_password"
-    echo "[start] 已使用环境变量 CC_SWITCH_WEB_PASSWORD 设置 Web 登录密码"
-fi
-
-cc-switch-web &
-CC_SWITCH_PID=$!
-echo "[start] CC-Switch Web PID: ${CC_SWITCH_PID}"
-
-# ============================================================
-# 3. 等待 CC-Switch Web 就绪
-# ============================================================
-echo "[start] 等待 CC-Switch Web 就绪 ..."
-MAX_RETRIES=30
-RETRY_COUNT=0
-while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    # CC-Switch Web 需登录（file-based credentials），未鉴权访问返回 401 属正常；
-    # 用 curl -s（仅连接失败才判非就绪），不能用 -f（4xx 会被判失败）。
-    if curl -s "http://127.0.0.1:${PORT:-8890}" >/dev/null 2>&1; then
-        echo "[start] CC-Switch Web 已就绪"
-        break
-    fi
-    RETRY_COUNT=$((RETRY_COUNT + 1))
-    sleep 1
-done
-
-if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-    echo "[warn] CC-Switch Web 未在 ${MAX_RETRIES}s 内就绪，继续运行..."
-fi
-
-# ============================================================
-# 4. 向 CC-Switch 写入遗留快照（仅用于 Web UI 展示，不依赖它启用 provider）
-# ============================================================
-CC_SWITCH_DIR="${HOME}/.cc-switch"
-CC_SWITCH_CONFIG="${CC_SWITCH_DIR}/config.json"
-
-mkdir -p "${CC_SWITCH_DIR}"
-
-# 说明：
-# - cc-switch-web v0.21.0 的运行时权威存储是 SQLite（~/.cc-switch/cc-switch.db），
-#   启动时若数据库为空，会从 ~/.cc-switch/config.json（遗留快照）导入。
-# - 但 v0.21.0 Web Server 模式下，Web UI 的 "启用 Provider" / Stream Check 会调用
-#   桌面端独占的 Tauri invoke / check_env_conflicts，导致
-#   "TypeError: Cannot read properties of undefined (reading 'invoke')" 与 501 报错。
-# - 因此本脚本已直接生成 Claude Code 的 ~/.claude/settings.json，Claude Code 不
-#   依赖 CC-Switch UI 启用即可工作。
-# - 以下 config.json 仅作为遗留快照写入，让 Web UI 能展示 provider 信息；如需真正
-#   通过 CC-Switch 路由使用，请改用其 REST API（见运维手册）。
-if [ ! -f "${CC_SWITCH_CONFIG}" ]; then
-    echo "[start] 写入 CC-Switch 遗留快照配置 ..."
-
-    cat > "${CC_SWITCH_CONFIG}" <<EOF
-{
-  "providers": {
-    "${ACTIVE_PROVIDER}": {
-      "baseUrl": "${ACTIVE_BASE_URL}",
-      "apiKey": "${ACTIVE_API_KEY}",
-      "model": "${ACTIVE_MODEL}",
-      "enabled": true
-    }
-  },
-  "activeProvider": "${ACTIVE_PROVIDER}"
-}
-EOF
-    echo "[start] 已写入 ${CC_SWITCH_CONFIG}（仅展示/导入用）"
-else
-    echo "[start] 已存在 CC-Switch 配置文件，跳过写入: ${CC_SWITCH_CONFIG}"
-    echo "[start] 当前激活供应商: $(cat "${CC_SWITCH_CONFIG}" | grep activeProvider | sed 's/.*: "\(.*\)".*/\1/' 2>/dev/null || echo '未知')"
-fi
-
-# ============================================================
-# 5. 读取并显示 Web 密码
-# ============================================================
-WEB_PASSWORD=""
-WEB_PASSWORD_FILE="${CC_SWITCH_DIR}/web_password"
-if [ -f "${WEB_PASSWORD_FILE}" ]; then
-    WEB_PASSWORD="$(cat "${WEB_PASSWORD_FILE}" 2>/dev/null | tr -d '[:space:]')"
-fi
-if [ -z "${WEB_PASSWORD}" ]; then
-    WEB_PASSWORD="（未找到，请查看 ${WEB_PASSWORD_FILE}）"
-fi
 
 # ============================================================
 # 6. 自动部署钩子
@@ -240,11 +147,6 @@ echo "  供应商:         ${ACTIVE_PROVIDER}"
 echo "  模型:           ${ACTIVE_MODEL}"
 echo "  API 地址:       ${ACTIVE_BASE_URL}"
 echo ""
-echo "  CC-Switch Web UI:"
-echo "    浏览器访问 http://localhost:${PORT:-8890}"
-echo "    默认用户名: admin"
-echo "    密码: ${WEB_PASSWORD}"
-echo ""
 echo "  Claude Code 经 litellm 代理访问 (复刻 CC-Switch 本地路由):"
 echo "    ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL}"
 echo "    ANTHROPIC_MODEL=${ANTHROPIC_MODEL}"
@@ -255,10 +157,6 @@ echo ""
 echo "  Claude Code 配置已写入 ~/.claude/settings.json"
 echo "    Claude Code 通过 litellm(http://litellm:4000) 路由到 ${ACTIVE_PROVIDER}（OpenAI Chat Completions）"
 echo ""
-echo "  注意：CC-Switch Web UI v0.21.0 的 '启用 Provider' / Stream Check 按钮"
-echo "        在 Web Server 模式下会触发桌面端 API 导致报错（见运维手册说明）。"
-echo "        如需通过 CC-Switch 路由切换，请使用其 REST API 而非 Web UI 按钮。"
-echo ""
 echo "  自动部署: $( [ "${DEVPILOT_AUTO_DEPLOY}" = "true" ] && echo "已启用" || echo "未启用" )"
 echo ""
 echo "  Git 版本:"
@@ -266,5 +164,6 @@ git --version
 echo ""
 echo "========================================"
 
-# ---- 8. 保持容器运行 ----
-wait ${CC_SWITCH_PID}
+# ---- 8. 保持容器运行（cc-switch-web 已移除，Claude Code 为交互式 CLI，需前台进程保活） ----
+# 使用 tail -f /dev/null 作为永不退出的前台进程（Docker 经典模式）
+tail -f /dev/null
