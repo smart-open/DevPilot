@@ -38,7 +38,7 @@ DevPilot CI/CD 体系围绕 3 个 Docker 容器构建：
 |------|---------|------|------|
 | Redis | `redis:8.8.1-alpine` | 8.8.1 | 6379（仅内部） |
 | OpenClaw | `node:22.23.1-bookworm` | `openclaw@2026.7.1-2` | 18789 |
-| CC-Switch + Claude Code | `node:22.23.1-bookworm` | `cc-switch-web@v0.21.0` + `claude-code@2.1.220` | 8890 |
+| Claude Code | `node:22.23.1-bookworm` | `claude-code@2.1.220` | - |
 
 CI 负责代码检查、镜像构建、镜像推送和安全扫描；CD 负责将构建好的镜像部署到不同环境。
 
@@ -152,7 +152,6 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 ```bash
 NODE_IMAGE_TAG=22.23.1-bookworm      # Node.js 基础镜像版本
 OPENCLAW_VERSION=2026.7.1-2          # OpenClaw 版本
-CC_SWITCH_VERSION=v0.21.0            # CC-Switch Web 版本
 CLAUDE_CODE_VERSION=2.1.220          # Claude Code 版本
 ```
 
@@ -354,7 +353,7 @@ GitLab Runner 需配置 Docker 执行器并启用 Docker-in-Docker 服务。
 |----------|--------|------|
 | `NODE_IMAGE_TAG` | `22.23.1-bookworm` | Node.js 基础镜像版本 |
 | `OPENCLAW_VERSION` | `2026.7.1-2` | OpenClaw npm 包版本 |
-| `CC_SWITCH_VERSION` | `v0.21.0` | CC-Switch Web 版本 |
+
 | `CLAUDE_CODE_VERSION` | `2.1.220` | Claude Code npm 包版本 |
 
 升级组件版本时，修改 `versions.env` 后同步更新对应 CI 配置文件中的默认值。
@@ -668,7 +667,7 @@ bash cicd/scripts/deploy.sh --help
 
 **健康检查**：
 
-- **Docker 模式**：检查 Redis PONG、OpenClaw /healthz、CC-Switch Web HTTP 200
+- **Docker 模式**：检查 Redis PONG、OpenClaw /healthz、LiteLLM /health/liveliness 200
 - **Kubernetes 模式**：检查 Pod 状态、Service 状态、PVC 状态，等待 Pod 就绪
 
 ---
@@ -740,10 +739,10 @@ bash cicd/service-deploy/deploy-service.sh --list
 | `REDIS_PASSWORD` | Redis 认证密码 | `DevPilotRedis2026Secure` |
 | `OPENCLAW_GATEWAY_TOKEN` | OpenClaw Gateway Token | `DevPilotGatewayToken2026Secure` |
 | `OPENCLAW_GATEWAY_PORT` | OpenClaw Gateway 端口 | `18789` |
-| `CC_SWITCH_WEB_PORT` | CC-Switch Web UI 端口 | `8890` |
+
 | `NODE_IMAGE_TAG` | Node.js 基础镜像版本 | `22.23.1-bookworm` |
 | `OPENCLAW_VERSION` | OpenClaw npm 版本 | `2026.7.1-2` |
-| `CC_SWITCH_VERSION` | CC-Switch Web 版本 | `v0.21.0` |
+
 | `CLAUDE_CODE_VERSION` | Claude Code 版本 | `2.1.220` |
 | `TZ` | 时区 | `Asia/Shanghai` |
 
@@ -754,7 +753,7 @@ bash cicd/service-deploy/deploy-service.sh --list
 | `AGNES_MODEL_FLASH` | 默认文本模型名称 | `agnes-2.5-flash` |
 | `DEVPILOT_AUTO_DEPLOY` | 开发完成后自动部署服务 | `false` |
 
-> 组件版本变量（`NODE_IMAGE_TAG` / `OPENCLAW_VERSION` / `CC_SWITCH_VERSION` / `CLAUDE_CODE_VERSION`）由 `versions.env` 统一管理，`init.sh` 会自动加载，一般无需在 `.env` 中重复配置。
+> 组件版本变量（`NODE_IMAGE_TAG` / `OPENCLAW_VERSION` / `CLAUDE_CODE_VERSION` / `LITELLM_VERSION`）由 `versions.env` 统一管理，`init.sh` 会自动加载，一般无需在 `.env` 中重复配置。
 
 ---
 
@@ -766,7 +765,6 @@ CI 流水线和部署脚本通过 `--build-arg` 向 Dockerfile 传递构建参�
 |----------|------|--------|-------------------|
 | `NODE_IMAGE_TAG` | Node.js 基础镜像版本 | `22.23.1-bookworm` | 两个 Dockerfile |
 | `OPENCLAW_VERSION` | OpenClaw npm 版本 | `2026.7.1-2` | `dockerfiles/openclaw/Dockerfile` |
-| `CC_SWITCH_VERSION` | CC-Switch Web 版本 | `v0.21.0` | `dockerfiles/devpilot-claude/Dockerfile` |
 | `CLAUDE_CODE_VERSION` | Claude Code 版本 | `2.1.220` | `dockerfiles/devpilot-claude/Dockerfile` |
 
 **Dockerfile 中的 CRLF 修复**：

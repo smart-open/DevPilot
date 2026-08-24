@@ -24,7 +24,7 @@ DevPilot 的核心理念：**AI 开发 -> 自动部署 -> 飞书通知**。Claud
 - [CI/CD 工作流](#cicd-工作流)
 - [构建类型](#构建类型)
 - [健康检查](#健康检查)
-- [CC-Switch 供应商自动配置](#cc-switch-供应商自动配置)
+- [Claude Code 供应商自动配置](#claude-code-供应商自动配置)
 - [配置参考](#配置参考)
 - [常见问题](#常见问题)
 
@@ -608,13 +608,13 @@ echo "include: 'cicd/service-deploy/ci/gitlab/.gitlab-ci-service-deploy.yml'" >>
 
 ---
 
-## CC-Switch 供应商自动配置
+## Claude Code 供应商自动配置
 
 CC-Switch 容器启动时会**自动配置 agnes-ai 供应商**，无需手动在 Web UI 中添加。
 
 **自动配置逻辑**（位于 `conf/devpilot-claude/start.sh`）：
 
-1. CC-Switch Web 启动并就绪后，检查 `~/.cc-switch/config.json` 是否存在
+1. Claude Code 启动时 `start.sh` 检查 `/home/node/.claude/settings.json` 是否存在（首启动 init 自动生成）
 2. 若不存在，则从环境变量读取 `AGNES_BASE_URL`、`AGNES_API_KEY`（及 `ANTHROPIC_MODEL`，默认 `agnes-2.5-flash`），写入初始配置：
    ```json
    {
@@ -631,7 +631,7 @@ CC-Switch 容器启动时会**自动配置 agnes-ai 供应商**，无需手动�
    ```
 3. 若配置文件已存在，则跳过，避免覆盖用户自定义配置
 
-> 因此，只要 `.env` 中正确填写了 `AGNES_API_KEY` 和 `AGNES_BASE_URL`，Claude Code 启动后即可直接通过 agnes-ai 供应商使用，无需额外操作。如需自定义供应商，可在 CC-Switch Web UI（`http://localhost:8890`）中修改。
+> 因此，只要 `.env` 中正确填写了 `LLM_PLATFORM` 与对应平台的 `*_API_KEY` 和 `*_BASE_URL`，Claude Code 启动后即可通过 devpilot-litellm 自动配置对应供应商。无需手动操作 UI。
 
 ---
 
@@ -750,7 +750,7 @@ bash cicd/service-deploy/deploy-service.sh --service-dir workspace/my-api --dry-
 
 ### Q: CC-Switch 需要手动配置 agnes-ai 供应商吗
 
-不需要。CC-Switch 容器启动时会自动从环境变量（`AGNES_BASE_URL`、`AGNES_API_KEY`）生成 `~/.cc-switch/config.json`，将 agnes-ai 设为默认激活供应商。仅在配置文件已存在（用户曾自定义）时才跳过自动配置。
+不需要。devpilot-claude 容器启动时 `start.sh` 会根据 `.env` 中的 `LLM_PLATFORM` 与对应平台凭据，将供应商配置写入 `/home/node/.claude/settings.json`。仅在配置文件已存在（用户曾自定义）时才跳过自动配置。
 
 ### Q: YAML 解析器为什么不用 yq
 
