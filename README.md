@@ -41,7 +41,7 @@ git clone <repo-url> devpilot && cd devpilot
 ### 部署完成后访问
 
 - **飞书机器人**：在飞书客户端搜索并添加机器人，发送消息即可获得 AI 回复
-- **Claude Code**：运行 `docker compose exec cc-switch-claude claude` 或 `make claude`
+- **Claude Code**：运行 `docker compose exec devpilot-claude claude` 或 `make claude`
 - **CC-Switch Web UI**：浏览器打开 `http://localhost:8890`
 - **OpenClaw Gateway**：`http://localhost:18789/healthz`
 
@@ -172,7 +172,7 @@ devpilot/
 ├── conf/                       # 配置文件
 │   ├── redis/redis.conf
 │   ├── openclaw/
-│   └── cc-switch-claude/
+│   └── devpilot-claude/
 ├── dockerfiles/                # Dockerfile
 ├── skills/                     # AI 研发流程技能（7 个阶段）
 │   ├── explore-SKILL.md        # 需求探索

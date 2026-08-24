@@ -212,7 +212,7 @@ bash cicd/ci/scripts/lint.sh
 |------|--------|------|
 | Lint | `lint` | Shell 脚本语法检查、Dockerfile 存在性检查、docker-compose.yml 语法校验、`.env.example` 变量完整性检查 |
 | Build | `build-openclaw` | 构建 OpenClaw 镜像，推送至 `ghcr.io`，缓存 Docker 层 |
-| Build | `build-cc-switch-claude` | 构建 CC-Switch+Claude 镜像，推送至 `ghcr.io`，缓存 Docker 层 |
+| Build | `build-devpilot-claude` | 构建 CC-Switch+Claude 镜像，推送至 `ghcr.io`，缓存 Docker 层 |
 | Scan | `security-scan` | Trivy 安全扫描两个镜像 + 文件系统扫描，结果上传至 GitHub Security |
 
 **镜像仓库**：GitHub Container Registry（`ghcr.io`）
@@ -225,7 +225,7 @@ bash cicd/ci/scripts/lint.sh
 
 **Docker 层缓存**：使用 GitHub Actions Cache（`type=gha`），按镜像名分 scope：
 - `openclaw` scope
-- `cc-switch-claude` scope
+- `devpilot-claude` scope
 
 **使用方式**：
 
@@ -310,11 +310,11 @@ cp cicd/ci/gitee/workflows/ci.yml .workflow/devpilot-ci.yml
 | `lint` | `lint:compose` | docker-compose.yml 语法校验 |
 | `lint` | `lint:env-template` | .env.example 变量完整性检查 |
 | `build` | `build:openclaw` | 构建 OpenClaw 镜像（Docker-in-Docker） |
-| `build` | `build:cc-switch-claude` | 构建 CC-Switch+Claude 镜像 |
+| `build` | `build:devpilot-claude` | 构建 CC-Switch+Claude 镜像 |
 | `push` | `push:openclaw` | 推送至 GitLab 镜像仓库 |
-| `push` | `push:cc-switch-claude` | 推送至 GitLab 镜像仓库 |
+| `push` | `push:devpilot-claude` | 推送至 GitLab 镜像仓库 |
 | `scan` | `scan:openclaw` | Trivy 安全扫描 OpenClaw |
-| `scan` | `scan:cc-switch-claude` | Trivy 安全扫描 CC-Switch+Claude |
+| `scan` | `scan:devpilot-claude` | Trivy 安全扫描 CC-Switch+Claude |
 | `scan` | `scan:filesystem` | 文件系统安全扫描 |
 
 **技术要点**：
@@ -557,7 +557,7 @@ K8s 部署统一采用 **Helm Chart 唯一方式**，不再提供 kubectl 原生
 | `redis.persistence.size` | Redis 存储大小 | `1Gi` |
 | `openclaw.image` | OpenClaw 镜像 | `devpilot-openclaw:latest` |
 | `openclaw.gatewayPort` | Gateway 端口 | `18789` |
-| `ccSwitchClaude.image` | CC-Switch 镜像 | `devpilot-cc-switch-claude:latest` |
+| `ccSwitchClaude.image` | CC-Switch 镜像 | `devpilot-claude:latest` |
 | `ccSwitchClaude.webPort` | Web UI 端口 | `8890` |
 | `ingress.enabled` | 是否启用 Ingress | `false` |
 
@@ -766,8 +766,8 @@ CI 流水线和部署脚本通过 `--build-arg` 向 Dockerfile 传递构建参�
 |----------|------|--------|-------------------|
 | `NODE_IMAGE_TAG` | Node.js 基础镜像版本 | `22.23.1-bookworm` | 两个 Dockerfile |
 | `OPENCLAW_VERSION` | OpenClaw npm 版本 | `2026.7.1-2` | `dockerfiles/openclaw/Dockerfile` |
-| `CC_SWITCH_VERSION` | CC-Switch Web 版本 | `v0.21.0` | `dockerfiles/cc-switch-claude/Dockerfile` |
-| `CLAUDE_CODE_VERSION` | Claude Code 版本 | `2.1.220` | `dockerfiles/cc-switch-claude/Dockerfile` |
+| `CC_SWITCH_VERSION` | CC-Switch Web 版本 | `v0.21.0` | `dockerfiles/devpilot-claude/Dockerfile` |
+| `CLAUDE_CODE_VERSION` | Claude Code 版本 | `2.1.220` | `dockerfiles/devpilot-claude/Dockerfile` |
 
 **Dockerfile 中的 CRLF 修复**：
 

@@ -612,7 +612,7 @@ echo "include: 'cicd/service-deploy/ci/gitlab/.gitlab-ci-service-deploy.yml'" >>
 
 CC-Switch 容器启动时会**自动配置 agnes-ai 供应商**，无需手动在 Web UI 中添加。
 
-**自动配置逻辑**（位于 `conf/cc-switch-claude/start.sh`）：
+**自动配置逻辑**（位于 `conf/devpilot-claude/start.sh`）：
 
 1. CC-Switch Web 启动并就绪后，检查 `~/.cc-switch/config.json` 是否存在
 2. 若不存在，则从环境变量读取 `AGNES_BASE_URL`、`AGNES_API_KEY`（及 `ANTHROPIC_MODEL`，默认 `agnes-2.5-flash`），写入初始配置：
