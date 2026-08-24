@@ -103,6 +103,7 @@ services:
       - OPENCLAW_GATEWAY_PORT=${OPENCLAW_GATEWAY_PORT}
       - FEISHU_APP_ID=${FEISHU_APP_ID}
       - FEISHU_APP_SECRET=${FEISHU_APP_SECRET}
+      - FEISHU_BOT_NAME=${FEISHU_BOT_NAME:-DevPilot助手}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
     volumes:
       - ./data/openclaw:/data/openclaw

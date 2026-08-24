@@ -92,11 +92,24 @@
       "allowInsecureAuth": true
     }
   },
+  "plugins": {
+    "entries": {
+      "feishu": {
+        "enabled": true
+      }
+    }
+  },
   "channels": {
     "feishu": {
       "enabled": true,
-      "appId": "{{FEISHU_APP_ID}}",
-      "appSecret": "{{FEISHU_APP_SECRET}}"
+      "dmPolicy": "pairing",
+      "accounts": {
+        "main": {
+          "appId": "{{FEISHU_APP_ID}}",
+          "appSecret": "{{FEISHU_APP_SECRET}}",
+          "botName": "{{FEISHU_BOT_NAME}}"
+        }
+      }
     }
   },
   "redis": {
