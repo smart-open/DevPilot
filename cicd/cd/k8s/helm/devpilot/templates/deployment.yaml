@@ -452,7 +452,7 @@ spec:
               mountPath: /workspace
             {{- end }}
             {{- if .Values.ccSwitchClaude.configPersistence.enabled }}
-            - name: cc-switch-data
+            - name: devpilot-claude-data
               mountPath: /home/node
             {{- end }}
           resources:
@@ -478,7 +478,7 @@ spec:
             claimName: {{ include "devpilot.ccSwitchClaude.fullname" . }}-workspace-pvc
         {{- end }}
         {{- if .Values.ccSwitchClaude.configPersistence.enabled }}
-        - name: cc-switch-data
+        - name: devpilot-claude-data
           persistentVolumeClaim:
             claimName: {{ include "devpilot.ccSwitchClaude.fullname" . }}-config-pvc
         {{- end }}

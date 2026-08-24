@@ -85,7 +85,7 @@ export ANTHROPIC_BASE_URL="${LITELLM_PROXY_URL}"
 export ANTHROPIC_API_KEY="${LITELLM_AUTH_KEY}"
 export ANTHROPIC_MODEL="${LLM_PLATFORM_LC}/${ACTIVE_MODEL}"
 
-# 同时持久化到 Claude Code 配置文件，避免 CC-Switch Web UI 的 provider 切换在 v0.21.0 中
+# 持久化到 Claude Code 配置文件（init 时按 .env 与 LLM_PLATFORM 自动生成）
 # 因调用桌面端独占 API 而失败，导致 Claude Code 无法启动。
 CLAUDE_CONFIG_DIR="${HOME}/.claude"
 mkdir -p "${CLAUDE_CONFIG_DIR}"
@@ -101,7 +101,7 @@ EOF
 fi
 
 # Claude Code 全局 settings.json，直接指向当前激活的模型供应商
-# 注：CC-Switch Web UI 理论上可接管该文件，但 v0.21.0 Web Server 模式下
+# 注：Claude Code 也可通过 devpilot-litellm 路由访问所有供应商（本配置无需 UI 切换）
 #     "启用 Provider" 按钮会触发桌面端 invoke/check_env_conflicts 导致失败。
 #     此处预先生成，使 Claude Code 不依赖 CC-Switch UI 即可工作。
 CLAUDE_SETTINGS="${CLAUDE_CONFIG_DIR}/settings.json"
@@ -164,6 +164,6 @@ git --version
 echo ""
 echo "========================================"
 
-# ---- 8. 保持容器运行（cc-switch-web 已移除，Claude Code 为交互式 CLI，需前台进程保活） ----
+# ---- 8. 保持容器运行（Claude Code 为交互式 CLI，需前台进程保活） ----
 # 使用 tail -f /dev/null 作为永不退出的前台进程（Docker 经典模式）
 tail -f /dev/null

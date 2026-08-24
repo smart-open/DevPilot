@@ -92,9 +92,9 @@ docker compose down -v 2>&1 | tail -5 || true
 echo -e "${GREEN}[5/8]${NC} 数据目录迁移与残留清理..."
 if [ -d data/cc-switch-claude ] && [ ! -d data/devpilot-claude ]; then
     mv data/cc-switch-claude data/devpilot-claude
-    echo -e "  ✓ data/cc-switch-claude -> data/devpilot-claude"
+    echo -e "  ✓ data/cc-switch-claude -> data/devpilot-claude (一次性迁移)"
 elif [ -d data/cc-switch-claude ] && [ -d data/devpilot-claude ]; then
-    echo -e "${YELLOW}  data/cc-switch-claude 与 data/devpilot-claude 同时存在，请人工处理${NC}"
+    echo -e "${YELLOW}  data/cc-switch-claude 与 data/devpilot-claude 同时存在，请人工处理（合并后保留 devpilot-claude）${NC}"
 fi
 if [ -d logs/cc-switch-claude ] && [ ! -d logs/devpilot-claude ]; then
     mv logs/cc-switch-claude logs/devpilot-claude
@@ -104,6 +104,7 @@ fi
 docker volume ls -q 2>/dev/null | grep -E "cc-switch-claude" | xargs -r docker volume rm 2>/dev/null || true
 # 清理旧镜像
 docker images -q devpilot-cc-switch-claude 2>/dev/null | xargs -r docker rmi -f 2>/dev/null || true
+docker images -q 'cc-switch-web' 2>/dev/null | xargs -r docker rmi -f 2>/dev/null || true
 echo -e "  ✓ 旧卷/镜像清理完成"
 
 # ---- 6. 数据清空确认 ----

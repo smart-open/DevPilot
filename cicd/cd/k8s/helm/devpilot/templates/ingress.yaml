@@ -1,6 +1,6 @@
 {{/*
 DevPilot Helm Chart - Ingress（可选）
-通过 Ingress 对外暴露 OpenClaw 和 CC-Switch Web UI
+通过 Ingress 对外暴露 OpenClaw（18789）
 启用方式：在 values.yaml 中设置 ingress.enabled: true
 */}}
 {{- if .Values.ingress.enabled -}}
@@ -36,7 +36,7 @@ spec:
                 name: {{ include "devpilot.openclaw.fullname" . }}
                 port:
                   number: {{ .Values.openclaw.gatewayPort }}
-    # ---- CC-Switch Web UI 路由 ----
+    # ---- 注释：CC-Switch Web UI 路由已移除（2026-08 重构） ----
     - host: {{ .Values.ingress.ccSwitchHost | quote }}
       http:
         paths:

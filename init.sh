@@ -243,7 +243,6 @@ echo -e "${BLUE}========== 第 4 步：可选配置（直接回车使用默认�
 echo ""
 
 read_input "OpenClaw Gateway 端口" "18789" "OPENCLAW_GATEWAY_PORT"
-read_input "CC-Switch Web UI 端口" "8890" "CC_SWITCH_WEB_PORT"
 read_input "是否启用自动部署 (true/false)" "false" "DEVPILOT_AUTO_DEPLOY"
 
 # ============================================================
@@ -311,9 +310,7 @@ OPENCLAW_VERSION=${OPENCLAW_VERSION}
 OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
 OPENCLAW_GATEWAY_PORT=${OPENCLAW_GATEWAY_PORT}
 
-# ---- CC-Switch Web 配置 ----
-CC_SWITCH_VERSION=${CC_SWITCH_VERSION}
-CC_SWITCH_WEB_PORT=${CC_SWITCH_WEB_PORT}
+# ---- 注：CC-Switch Web v0.21.0 已移除，主路由由 devpilot-litellm 承担 ----
 
 # ---- Claude Code 配置 ----
 CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION}
@@ -371,13 +368,11 @@ echo -e "  飞书 App ID:   ${FEISHU_APP_ID}"
 echo -e "  Redis 密码:    $(echo "${REDIS_PASSWORD}" | sed 's/./*/g')"
 echo -e "  Gateway Token: $(echo "${OPENCLAW_GATEWAY_TOKEN}" | sed 's/./*/g')"
 echo -e "  Gateway 端口:  ${OPENCLAW_GATEWAY_PORT}"
-echo -e "  Web UI 端口:   ${CC_SWITCH_WEB_PORT}"
 echo -e "  自动部署:      ${DEVPILOT_AUTO_DEPLOY}"
 echo ""
 echo -e "${CYAN}组件版本（来自 versions.env）：${NC}"
 echo -e "  Node.js:       ${NODE_IMAGE_TAG}"
 echo -e "  OpenClaw:      ${OPENCLAW_VERSION}"
-echo -e "  CC-Switch:     ${CC_SWITCH_VERSION}"
 echo -e "  Claude Code:   ${CLAUDE_CODE_VERSION}"
 echo ""
 echo -e "${CYAN}下一步：${NC}"

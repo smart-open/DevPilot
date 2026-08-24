@@ -277,7 +277,7 @@ jobs:
         with:
           image-ref: devpilot-claude:ci-scan
           format: sarif
-          output: trivy-cc-switch-results.sarif
+          output: trivy-devpilot-claude-results.sarif
           exit-code: "0"
           severity: CRITICAL,HIGH
 
@@ -291,7 +291,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
-          sarif_file: trivy-cc-switch-results.sarif
+          sarif_file: trivy-devpilot-claude-results.sarif
 
       - name: 扫描文件系统（配置文件安全检查）
         uses: aquasecurity/trivy-action@master

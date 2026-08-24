@@ -91,15 +91,13 @@ success ".env 文件存在"
 # ---- 读取基础配置 ----
 debug "读取配置文件"
 GATEWAY_PORT=$(grep "^OPENCLAW_GATEWAY_PORT=" .env | cut -d'=' -f2)
-WEB_PORT=$(grep "^CC_SWITCH_WEB_PORT=" .env | cut -d'=' -f2)
 REDIS_PASS=$(grep "^REDIS_PASSWORD=" .env | cut -d'=' -f2)
 
 if [ -z "${GATEWAY_PORT}" ]; then GATEWAY_PORT=18789; fi
-if [ -z "${WEB_PORT}" ]; then WEB_PORT=8890; fi
+# CC-Switch Web 已移除（2026-08），不再需要 WEB_PORT 变量
 
 debug "配置读取结果"
 debug "  GATEWAY_PORT: ${GATEWAY_PORT}"
-debug "  WEB_PORT: ${WEB_PORT}"
 debug "  REDIS_PASS: $(if [ -n "${REDIS_PASS}" ]; then echo '已设置'; else echo '未设置'; fi)"
 
 # ============================================================
@@ -226,12 +224,12 @@ verify_container_model() {
     fi
 
     # ============================================================
-    # 检查 2-5: CC-Switch 容器（如果存在）
+    # 检查 2-5: devpilot-claude 容器（含 Claude Code + LiteLLM 路由）
     # ============================================================
     local cc_container="devpilot-claude"
     if docker inspect "${cc_container}" &>/dev/null; then
 
-        # ---- 检查 2/5: CC-Switch LLM_PLATFORM ----
+        # ---- 检查 2/5: devpilot-claude LLM_PLATFORM（来自 .env） ----
         local cc_platform
         cc_platform=$(docker exec "${cc_container}" printenv LLM_PLATFORM 2>/dev/null || echo "")
         if [ "${cc_platform}" != "${LLM_PLATFORM}" ]; then
@@ -245,9 +243,8 @@ verify_container_model() {
             success "[2/5] ${cc_container} LLM_PLATFORM=${cc_platform} 与配置一致"
         fi
 
-        # ---- 检查 3/5: CC-Switch activeProvider ----
-        local cc_config="/home/node/.cc-switch/config.json"
-        local active_provider
+        # ---- 检查 3/5: devpilot-claude ANTHROPIC_MODEL 与 settings.json 一致性 ----
+                local active_provider
         active_provider=$(docker exec "${cc_container}" cat "${cc_config}" 2>/dev/null | grep activeProvider | sed 's/.*: "\(.*\)".*/\1/' 2>/dev/null || echo "")
         if [ -n "${active_provider}" ]; then
             # 映射平台标识到供应商名称
@@ -260,8 +257,8 @@ verify_container_model() {
                 error "  -> 配置文件: ${cc_config}"
                 error "  -> 当前值:   ${active_provider}"
                 error "  -> 期望值:   ${expected_provider}"
-                error "  -> 修复：删除 data/devpilot-claude/.cc-switch/config.json 后运行 ./service.sh restart"
-                error_details="${error_details}\n  [FAIL] ${cc_container} | activeProvider | 当前=${active_provider} vs 期望=${expected_provider}"
+                error "  -> 修复：删除 data/devpilot-claude/.claude/settings.json 重启
+"                error_details="${error_details}\n  [FAIL] ${cc_container} | activeProvider | 当前=${active_provider} vs 期望=${expected_provider}"
                 found_errors=1
             else
                 success "[3/5] ${cc_container} activeProvider=${active_provider} 与期望一致"
@@ -271,7 +268,7 @@ verify_container_model() {
             error_details="${error_details}\n  [SKIP] ${cc_container} | activeProvider | 配置文件不存在"
         fi
 
-        # ---- 检查 4/5: CC-Switch ANTHROPIC_BASE_URL ----
+        # ---- 检查 4/5: devpilot-claude ANTHROPIC_BASE_URL = http://litellm:4000 ----
         local anthropic_url
         anthropic_url=$(docker exec "${cc_container}" printenv ANTHROPIC_BASE_URL 2>/dev/null || echo "")
         if [ -n "${anthropic_url}" ]; then
@@ -290,7 +287,7 @@ verify_container_model() {
             error_details="${error_details}\n  [SKIP] ${cc_container} | ANTHROPIC_BASE_URL | 未设置"
         fi
 
-        # ---- 检查 5/5: CC-Switch ANTHROPIC_MODEL ----
+        # ---- 检查 5/5: devpilot-claude ANTHROPIC_MODEL = <platform>/<model> 格式 ----
         local anthropic_model
         anthropic_model=$(docker exec "${cc_container}" printenv ANTHROPIC_MODEL 2>/dev/null || echo "")
         if [ -n "${anthropic_model}" ]; then
@@ -361,8 +358,8 @@ verify_container_model() {
         echo ""
         warn "修复建议："
         echo -e "  1. 容器环境变量不一致 -> 运行 ${GREEN}./service.sh restart${NC} 重建容器"
-        echo -e "  2. activeProvider 不一致 -> 删除 ${GREEN}data/devpilot-claude/.cc-switch/config.json${NC} 后重启"
-        echo -e "  3. API Key 为占位符 -> 编辑 ${GREEN}.env${NC} 设置真实 API Key"
+        echo -e "  2. 配置不一致 -> 删除 ${GREEN}data/devpilot-claude/.claude/settings.json${NC} 后重启
+"        echo -e "  3. API Key 为占位符 -> 编辑 ${GREEN}.env${NC} 设置真实 API Key"
         echo ""
         {
             echo ""
@@ -377,8 +374,8 @@ verify_container_model() {
             echo ""
             echo "修复建议:"
             echo "  1. 容器环境变量不一致 -> 运行 ./service.sh restart 重建容器"
-            echo "  2. activeProvider 不一致 -> 删除 data/devpilot-claude/.cc-switch/config.json 后重启"
-            echo "  3. API Key 为占位符 -> 编辑 .env 设置真实 API Key"
+            echo "  2. 配置不一致 -> 删除 data/devpilot-claude/.claude/settings.json 后重启
+"            echo "  3. API Key 为占位符 -> 编辑 .env 设置真实 API Key"
         } >> "${LOG_FILE}"
     fi
 }
@@ -432,7 +429,7 @@ do_start() {
     debug "Docker Compose 版本: $(docker compose version --short)"
 
     info "检查端口占用..."
-    for port in "${GATEWAY_PORT}" "${WEB_PORT}"; do
+    for port in "${GATEWAY_PORT}"; do
         if command -v ss &>/dev/null; then
             if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
                 warn "端口 ${port} 已被占用（可能是已有服务运行）"
@@ -450,7 +447,7 @@ do_start() {
     debug "构建的 compose 命令: ${cmd}"
 
     if [ -z "${profile_flag}" ]; then
-        info "启动全部服务（Redis + OpenClaw + CC-Switch）..."
+        info "启动全部服务（Redis + OpenClaw + devpilot-claude + devpilot-litellm）..."
         debug "准备启动 3 个容器"
     else
         info "启动 profile=${profile_flag} 的服务..."
@@ -505,8 +502,9 @@ do_start() {
     fi
 
     if [ "${profile_name}" = "full" ] || [ "${profile_name}" = "dev" ]; then
-        debug "检查 CC-Switch Web 就绪（最多 30 次，间隔 2s）"
-        wait_for_http "CC-Switch Web" "http://localhost:${WEB_PORT}" 30 2 || warn "CC-Switch 未就绪"
+        debug "检查 devpilot-claude 容器 Claude Code 就绪（claude --version）"
+        # Claude Code 是 CLI 而非 HTTP 服务，通过 docker exec 检测
+        docker exec devpilot-claude claude --version >/dev/null 2>&1 || warn "Claude Code 未就绪"
     fi
 
     # 验证容器内模型配置是否生效
@@ -525,7 +523,6 @@ do_start() {
         summary_block="${summary_block}  OpenClaw:  http://localhost:${GATEWAY_PORT}\n"
     fi
     if [ "${profile_name}" = "full" ] || [ "${profile_name}" = "dev" ]; then
-        summary_block="${summary_block}  CC-Switch: http://localhost:${WEB_PORT}\n"
     fi
     summary_block="${summary_block}  模型平台：${LLM_PLATFORM_NAME} (${LLM_MODEL})"
 
@@ -546,7 +543,6 @@ do_start() {
             echo "  OpenClaw: http://localhost:${GATEWAY_PORT}"
         fi
         if [ "${profile_name}" = "full" ] || [ "${profile_name}" = "dev" ]; then
-            echo "  CC-Switch: http://localhost:${WEB_PORT}"
         fi
         echo "模型切换状态: 成功"
         echo "完成!"
@@ -648,7 +644,7 @@ do_status() {
 
     echo ""
     echo -e "${CYAN}端口监听:${NC}"
-    for port_info in "OpenClaw:${GATEWAY_PORT}" "CC-Switch:${WEB_PORT}"; do
+    for port_info in "OpenClaw:${GATEWAY_PORT}" "devpilot-litellm:容器内 4000"; do
         name="${port_info%%:*}"
         port="${port_info##*:}"
         if command -v ss &>/dev/null; then
@@ -698,10 +694,10 @@ do_health() {
         all_ok=0
     fi
 
-    echo -e "${CYAN}CC-Switch:${NC} "
+    echo -e "${CYAN}devpilot-litellm:${NC} "
     if curl -sf "http://localhost:${WEB_PORT}" >/dev/null 2>&1; then
         success "OK"
-        echo "CC-Switch: OK" >> "${LOG_FILE}"
+        echo "devpilot-litellm: OK" >> "${LOG_FILE}"
     else
         error "FAIL"
         echo "CC-Switch: FAIL" >> "${LOG_FILE}"
@@ -754,7 +750,7 @@ do_logs() {
         case "${service}" in
             redis)        service="redis" ;;
             openclaw|bot) service="openclaw" ;;
-            cc-switch|cc|claude) service="devpilot-claude" ;;
+            claude|claude-code|devpilot-claude) service="devpilot-claude" ;;
         esac
         info "查看 ${service} 日志（Ctrl+C 退出）..."
         docker compose --env-file .env logs -f --tail 100 "${service}"

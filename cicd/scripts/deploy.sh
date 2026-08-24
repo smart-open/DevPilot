@@ -269,10 +269,10 @@ health_check_docker() {
         warn "OpenClaw: 容器未运行"
     fi
 
-    # CC-Switch Web（从宿主机访问 Web 端口）
+    # devpilot-litellm（容器内 4000 端口，docker network 内可达）
     if docker ps --format '{{.Names}}' | grep -q "devpilot-claude"; then
     else
-        warn "CC-Switch Web: 容器未运行"
+        warn "devpilot-litellm: 容器未运行"
     fi
 }
 
@@ -337,7 +337,7 @@ echo -e "  Claude Code:       docker exec -it devpilot-claude claude"
   echo -e "  litellm 代理:      http://localhost:4000/health/liveliness"
 echo ""
 echo -e "${CYAN}下一步：${NC}"
-echo -e "  1. 浏览器访问 CC-Switch Web UI（agnes-ai 供应商已自动配置）"
+echo -e "  1. 通过 devpilot-claude 容器直接调用 Claude Code：docker compose exec devpilot-claude claude \"你谁\""
 echo -e "  2. 使用 Claude Code: docker exec -it devpilot-claude claude"
 echo -e "  3. 在飞书中测试机器人回复"
 echo ""

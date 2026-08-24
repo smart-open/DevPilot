@@ -153,7 +153,7 @@ mask_secret() {
 # - OpenClaw Token 优先取 .env（非空 + 非占位符），否则从 data/openclaw/.openclaw/openclaw.json
 #   的 gateway.token 字段读取（容器自动生成场景）；
 # - 若 openclaw.json 读到了真实 token 且 .env 仍是占位符/缺失，会回写到 .env 以保持一致。
-# - cc-switch-web v0.21.0 已移除（不适合 headless 容器），主路由由 devpilot-litellm 承担。
+# - 主路由由 devpilot-litellm 承担。
 print_credentials() {
     local openclaw_token="" token_source=""
     local env_token tmp
@@ -286,7 +286,7 @@ else
     warn "Make 未安装（可选，安装后可用 make 命令快捷操作）"
 fi
 
-# 网络端口检查（仅 OpenClaw Gateway 端口；cc-switch-web v0.21.0 已移除）
+# 网络端口检查（仅 OpenClaw Gateway 端口）
 detail "检查端口占用..."
 GATEWAY_PORT_CHECK=$(grep "^OPENCLAW_GATEWAY_PORT=" .env 2>/dev/null | cut -d'=' -f2 || echo "18789")
 for port in "${GATEWAY_PORT_CHECK}"; do
@@ -406,7 +406,6 @@ check_env_var "FEISHU_APP_SECRET"      "飞书 App Secret"      "secret" || ENV_
 check_env_var "REDIS_PASSWORD"         "Redis 密码"           "secret" || ENV_ERRORS=$((ENV_ERRORS + 1))
 check_env_var "OPENCLAW_GATEWAY_TOKEN" "Gateway Token"        "secret" || ENV_ERRORS=$((ENV_ERRORS + 1))
 check_env_var "OPENCLAW_GATEWAY_PORT"  "Gateway 端口"         ""       || ENV_ERRORS=$((ENV_ERRORS + 1))
-# CC_SWITCH_WEB_PORT 已移除（cc-switch-web v0.21.0 不再部署）
 check_env_var "TZ"                     "时区"                 ""       || ENV_ERRORS=$((ENV_ERRORS + 1))
 
 if [ ${ENV_ERRORS} -gt 0 ]; then
@@ -489,7 +488,6 @@ done
 # 端口绑定检查
 detail "检查端口绑定..."
 GATEWAY_PORT=$(grep "^OPENCLAW_GATEWAY_PORT=" .env | cut -d'=' -f2)
-WEB_PORT=$(grep "^CC_SWITCH_WEB_PORT=" .env | cut -d'=' -f2)
 REDIS_PASS=$(grep "^REDIS_PASSWORD=" .env | cut -d'=' -f2)
 
 for port_info in "OpenClaw:${GATEWAY_PORT}" "CC-Switch:${WEB_PORT}"; do
@@ -517,8 +515,6 @@ wait_for_redis "devpilot-redis" "${REDIS_PASS}" 45 || warn "Redis 未在预期�
 detail "OpenClaw 健康检查（最多 30 次重试，每 3s 一次）..."
 wait_for_http "OpenClaw" "http://localhost:${GATEWAY_PORT}/healthz" 30 3 || warn "OpenClaw 未在预期时间内就绪"
 
-detail "CC-Switch Web 健康检查（最多 45 次重试，每 2s 一次）..."
-wait_for_http "CC-Switch Web" "http://localhost:${WEB_PORT}" 45 2 || warn "CC-Switch 未在预期时间内就绪"
 
 step_end
 
@@ -552,7 +548,7 @@ echo "  2. 添加 agnes-ai 供应商（API Key 在 .env 文件中）"
 echo "  3. 启用 Claude Code takeover"
 echo ""
 
-# 打印本次部署生效的访问凭据（OpenClaw Token / CC-Switch Web 用户名密码）
+# 打印本次部署生效的访问凭据（OpenClaw Token）
 print_credentials
 
 echo -e "${YELLOW}部署日志: ${LOG_FILE}${NC}"

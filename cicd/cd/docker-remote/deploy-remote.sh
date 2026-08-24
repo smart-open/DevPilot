@@ -335,7 +335,7 @@ wait_for_redis "devpilot-redis" "${REDIS_PASSWORD}" || true
 # OpenClaw 健康检查
 wait_for_container_http "devpilot-openclaw" "18789" "/healthz" 40 3 || true
 
-# CC-Switch Web 健康检查
+# devpilot-claude 容器健康检查（Claude Code + LiteLLM 路由）
 
 # ============================================================
 # 8. 输出部署结果
