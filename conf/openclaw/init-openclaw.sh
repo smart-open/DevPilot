@@ -252,7 +252,7 @@ if [ -f "${CONFIG_FILE}" ]; then
     if [ -n "${FEISHU_APP_SECRET}" ] && [ "${FEISHU_APP_SECRET}" != "your-feishu-app-secret" ]; then
         openclaw config set channels.feishu.accounts.main.appSecret "${FEISHU_APP_SECRET}" 2>/dev/null || true
     fi
-    openclaw config set channels.feishu.accounts.main.botName "${FEISHU_BOT_NAME}" 2>/dev/null || true
+    openclaw config set channels.feishu.accounts.main.name "${FEISHU_BOT_NAME}" 2>/dev/null || true
 fi
 
 # ---- 3.7 飞书凭据空值告警 ----

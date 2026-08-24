@@ -1,6 +1,4 @@
 {
-  "version": "0.0.1",
-  "language": "zh-CN",
   "models": {
     "mode": "merge",
     "providers": {
@@ -89,10 +87,7 @@
     }
   },
   "gateway": {
-    "enabled": true,
     "bind": "lan",
-    "token": "{{OPENCLAW_GATEWAY_TOKEN}}",
-    "deviceAuth": false,
     "port": 18789,
     "controlUi": {
       "allowInsecureAuth": true,
@@ -105,22 +100,23 @@
       "feishu": {
         "enabled": true
       }
-    }
+    },
+    "bundledDiscovery": "compat"
   },
   "channels": {
     "feishu": {
       "enabled": true,
-      "dmPolicy": "pairing",
       "accounts": {
         "main": {
           "appId": "{{FEISHU_APP_ID}}",
           "appSecret": "{{FEISHU_APP_SECRET}}",
-          "botName": "{{FEISHU_BOT_NAME}}"
+          "name": "{{FEISHU_BOT_NAME}}",
+          "dmPolicy": "pairing"
+        },
+        "default": {
+          "dmPolicy": "pairing"
         }
       }
     }
-  },
-  "redis": {
-    "url": "redis://default:{{REDIS_PASSWORD}}@127.0.0.1:6379"
   }
 }
