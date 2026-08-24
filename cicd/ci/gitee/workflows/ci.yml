@@ -27,7 +27,6 @@ triggers:
 vars:
   NODE_IMAGE_TAG: "22.23.1-bookworm"
   OPENCLAW_VERSION: "2026.7.1-2"
-  CC_SWITCH_VERSION: "v0.21.0"
   CLAUDE_CODE_VERSION: "2.1.220"
   # Gitee 容器镜像仓库地址（需在 Gitee Go 变量中配置实际仓库）
   # REGISTRY: registry.cn-beijing.aliyuncs.com  # 或使用 Gitee 镜像仓库
@@ -100,7 +99,7 @@ stages:
             script: |
               #!/bin/bash
               echo "==> 检查 .env.example 变量完整性 ..."
-              REQUIRED_VARS="AGNES_API_KEY AGNES_BASE_URL FEISHU_APP_ID FEISHU_APP_SECRET REDIS_PASSWORD OPENCLAW_GATEWAY_TOKEN OPENCLAW_GATEWAY_PORT CC_SWITCH_WEB_PORT NODE_IMAGE_TAG OPENCLAW_VERSION CC_SWITCH_VERSION CLAUDE_CODE_VERSION TZ"
+              REQUIRED_VARS="AGNES_API_KEY AGNES_BASE_URL FEISHU_APP_ID FEISHU_APP_SECRET REDIS_PASSWORD OPENCLAW_GATEWAY_TOKEN OPENCLAW_GATEWAY_PORT NODE_IMAGE_TAG OPENCLAW_VERSION CLAUDE_CODE_VERSION TZ"
               for var in $REQUIRED_VARS; do
                 if grep -q "^${var}=" .env.example; then
                   echo "  [OK] ${var}"
@@ -144,10 +143,10 @@ stages:
               set -e
               echo "==> 构建 CC-Switch+Claude 镜像 ..."
               docker build \
-                --build-arg CC_SWITCH_VERSION=${CC_SWITCH_VERSION} \
+                --build-arg=${} \
                 --build-arg CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION} \
                 --build-arg NODE_IMAGE_TAG=${NODE_IMAGE_TAG} \
-                -t devpilot-claude:${CC_SWITCH_VERSION} \
+                -t devpilot-claude:${} \
                 -t devpilot-claude:latest \
                 -f dockerfiles/devpilot-claude/Dockerfile \
                 .
@@ -211,9 +210,9 @@ stages:
               fi
               NAMESPACE="${REGISTRY_NAMESPACE:-devpilot}"
               echo "==> 推送 CC-Switch+Claude 镜像 ..."
-              docker tag devpilot-claude:${CC_SWITCH_VERSION} ${REGISTRY}/${NAMESPACE}/devpilot-claude:${CC_SWITCH_VERSION}
+              docker tag devpilot-claude:${} ${REGISTRY}/${NAMESPACE}/devpilot-claude:${}
               docker tag devpilot-claude:latest ${REGISTRY}/${NAMESPACE}/devpilot-claude:latest
-              docker push ${REGISTRY}/${NAMESPACE}/devpilot-claude:${CC_SWITCH_VERSION}
+              docker push ${REGISTRY}/${NAMESPACE}/devpilot-claude:${}
               docker push ${REGISTRY}/${NAMESPACE}/devpilot-claude:latest
               echo "  [OK] CC-Switch+Claude 镜像推送完成"
 
@@ -267,7 +266,7 @@ stages:
                 --severity CRITICAL,HIGH \
                 --exit-code 0 \
                 --format table \
-                devpilot-claude:${CC_SWITCH_VERSION}
+                devpilot-claude:${}
               echo "  [OK] CC-Switch+Claude 镜像扫描完成"
 
         - step: shell@1

@@ -400,7 +400,6 @@ spec:
               valueFrom:
                 configMapKeyRef:
                   name: {{ include "devpilot.name" . }}-config
-                  key: CC_SWITCH_WEB_PORT
             - name: HOST
               value: "0.0.0.0"
             - name: ANTHROPIC_BASE_URL

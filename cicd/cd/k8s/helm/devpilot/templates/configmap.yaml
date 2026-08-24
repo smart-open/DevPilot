@@ -20,8 +20,6 @@ data:
   OPENCLAW_VERSION: {{ .Values.openclaw.version | quote }}
 
   # ---- CC-Switch + Claude Code 配置 ----
-  CC_SWITCH_VERSION: {{ .Values.ccSwitchClaude.ccSwitchVersion | quote }}
-  CC_SWITCH_WEB_PORT: {{ .Values.ccSwitchClaude.webPort | quote }}
   CLAUDE_CODE_VERSION: {{ .Values.ccSwitchClaude.claudeCodeVersion | quote }}
   DEVPILOT_AUTO_DEPLOY: {{ .Values.ccSwitchClaude.autoDeploy | quote }}
 

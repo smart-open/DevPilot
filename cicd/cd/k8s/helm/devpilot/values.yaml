@@ -141,7 +141,6 @@ ingress:
   # OpenClaw 域名
   openclawHost: "openclaw.your-domain.com"
   # CC-Switch 域名
-  ccSwitchHost: "cc-switch.your-domain.com"
   # TLS 配置
   tls:
     enabled: false
