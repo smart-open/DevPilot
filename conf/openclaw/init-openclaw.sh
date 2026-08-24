@@ -9,14 +9,19 @@ set -e
 # ============================================================
 
 OPENCLAW_HOME="/data/openclaw"
-CONFIG_FILE="${OPENCLAW_HOME}/openclaw.json"
+# OpenClaw 实际将运行时配置写入 ${OPENCLAW_HOME}/.openclaw/openclaw.json（隐藏子目录，
+# 行为同 Claude Code 的 ~/.claude）。此前 init 误写为 ${OPENCLAW_HOME}/openclaw.json，
+# 导致模板生成 / sed 修正 / node 补丁全部落在 openclaw 从不读取的孤儿文件上，
+# 配置正确性只能依赖 openclaw config set 兜底。此处统一指向真实路径。
+OPENCLAW_CONFIG_DIR="${OPENCLAW_HOME}/.openclaw"
+CONFIG_FILE="${OPENCLAW_CONFIG_DIR}/openclaw.json"
 
 echo "========================================"
 echo "  OpenClaw 初始化启动"
 echo "========================================"
 
 # ---- 1. 确保数据目录存在 ----
-mkdir -p "${OPENCLAW_HOME}"
+mkdir -p "${OPENCLAW_HOME}" "${OPENCLAW_CONFIG_DIR}"
 
 # ---- 2. 根据 LLM_PLATFORM 解析当前平台（与 start.sh / llm-init.sh 一致） ----
 LLM_PLATFORM="${LLM_PLATFORM:-agnes}"
@@ -54,7 +59,7 @@ ACTIVE_DEFAULT_MODEL="${ACTIVE_PROVIDER}/${ACTIVE_MODEL}"
 # 避免用户误用占位符导致“使用占位符 token 无法登录 / 不安全”。
 if [ -z "${OPENCLAW_GATEWAY_TOKEN}" ] || [ "${OPENCLAW_GATEWAY_TOKEN}" = "change-me-to-secure-token" ]; then
     OPENCLAW_GATEWAY_TOKEN="$(openssl rand -hex 24 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || date +%s%N)"
-    echo "[init] 未检测到安全 Gateway Token，已自动生成随机 Token（请妥善保存，重新生成需清 data/openclaw/openclaw.json）"
+    echo "[init] 未检测到安全 Gateway Token，已自动生成随机 Token（请妥善保存，重新生成需清 data/openclaw/.openclaw/openclaw.json）"
 fi
 export OPENCLAW_GATEWAY_TOKEN
 

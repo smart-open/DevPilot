@@ -145,7 +145,7 @@ backup: ## 备份 Redis 数据和 OpenClaw 配置
 	@$(COMPOSE) exec -T redis redis-cli -a "$$(grep REDIS_PASSWORD .env | cut -d= -f2)" BGSAVE >/dev/null 2>&1
 	@mkdir -p backups
 	@cp -r data/redis/dump.rdb "backups/dump-$$(date +%Y%m%d%H%M%S).rdb" 2>/dev/null || printf "$(YELLOW)Redis RDB 文件不存在，跳过$(RESET)\n"
-	@cp data/openclaw/openclaw.json "backups/openclaw-$$(date +%Y%m%d%H%M%S).json" 2>/dev/null || printf "$(YELLOW)OpenClaw 配置不存在，跳过$(RESET)\n"
+	@cp data/openclaw/.openclaw/openclaw.json "backups/openclaw-$$(date +%Y%m%d%H%M%S).json" 2>/dev/null || printf "$(YELLOW)OpenClaw 配置不存在，跳过$(RESET)\n"
 	@printf "$(GREEN)备份完成，文件在 backups/ 目录$(RESET)\n"
 
 .PHONY: clean
@@ -173,7 +173,7 @@ env: ## 查看当前环境变量
 
 .PHONY: reset-openclaw
 reset-openclaw: ## 重置 OpenClaw 配置（重新生成）
-	rm -f data/openclaw/openclaw.json
+	rm -f data/openclaw/.openclaw/openclaw.json
 	$(COMPOSE) restart openclaw
 	@printf "$(GREEN)OpenClaw 配置已重置$(RESET)\n"
 

@@ -150,7 +150,7 @@ mask_secret() {
 }
 
 # 打印部署后的访问凭据（OpenClaw Gateway Token / CC-Switch Web 密码）。
-# - OpenClaw Token 优先取 .env（非空 + 非占位符），否则从 data/openclaw/openclaw.json
+# - OpenClaw Token 优先取 .env（非空 + 非占位符），否则从 data/openclaw/.openclaw/openclaw.json
 #   的 gateway.token 字段读取（容器自动生成场景）；
 # - 若 openclaw.json 读到了真实 token 且 .env 仍是占位符/缺失，会回写到 .env 以保持一致；
 # - CC-Switch 密码从 data/cc-switch-claude/.cc-switch/web_password 读取。
@@ -163,13 +163,13 @@ print_credentials() {
     if [ -n "${env_token}" ] && [ "${env_token}" != "change-me-to-secure-token" ]; then
         openclaw_token="${env_token}"
         token_source=".env"
-    elif [ -f "data/openclaw/openclaw.json" ]; then
+    elif [ -f "data/openclaw/.openclaw/openclaw.json" ]; then
         # 从已生成的配置里读 gateway.token 字段（容器内 init-openclaw.sh 自动生成后写入）
-        openclaw_token="$(grep -E '"token"[[:space:]]*:' data/openclaw/openclaw.json \
+        openclaw_token="$(grep -E '"token"[[:space:]]*:' data/openclaw/.openclaw/openclaw.json \
             | head -1 \
             | sed -E 's/.*"token"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
         if [ -n "${openclaw_token}" ]; then
-            token_source="data/openclaw/openclaw.json（容器内自动生成）"
+            token_source="data/openclaw/.openclaw/openclaw.json（容器内自动生成）"
             # 回写到 .env，保持脚本间一致
             if grep -q '^OPENCLAW_GATEWAY_TOKEN=' .env; then
                 tmp="$(mktemp 2>/dev/null || echo .env.tmp)"
@@ -179,7 +179,7 @@ print_credentials() {
         fi
     fi
     if [ -z "${openclaw_token}" ]; then
-        openclaw_token="（未获取到，请检查 data/openclaw/openclaw.json）"
+        openclaw_token="（未获取到，请检查 data/openclaw/.openclaw/openclaw.json）"
         token_source="未知"
     fi
 
