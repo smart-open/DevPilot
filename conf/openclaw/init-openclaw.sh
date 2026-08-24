@@ -184,6 +184,42 @@ if [ -f "${CONFIG_FILE}" ]; then
     fi
 fi
 
+# ---- 3.4.1 过滤未完整配置的 provider（避免 baseUrl/apiKey 为空导致网关启动失败）----
+# 现象：仅配置 agnes 时，deepseek/glm/ark/bailian 的 baseUrl 经 sed 替换后为空字符串，
+# OpenClaw 2026.7.1-2 校验 "models.providers.<id>.baseUrl: Invalid input" → 网关起不来 → 重启循环。
+# 处理：仅保留 baseUrl 为合法 URL 且（apiKey 已填真实值 或 为当前激活平台）的 provider；
+# 其余（占位符/空值）直接剔除，确保生成的 openclaw.json 永远能通过 schema 校验。
+if [ -f "${CONFIG_FILE}" ] && command -v node >/dev/null 2>&1; then
+    ACTIVE_PROVIDER="${ACTIVE_PROVIDER:-agnes}" node -e "
+        const fs = require('fs');
+        const path = '${CONFIG_FILE}';
+        const active = process.env.ACTIVE_PROVIDER || 'agnes';
+        const cfg = JSON.parse(fs.readFileSync(path, 'utf8'));
+        const provs = (cfg.models && cfg.models.providers) || {};
+        const isPh = (v) => {
+            if (!v) return true;
+            return /^your-/i.test(v) || /change-me/i.test(v) || v.includes('{{') || v.includes('}}');
+        };
+        const kept = {};
+        const removed = [];
+        for (const [id, p] of Object.entries(provs)) {
+            const base = (p.baseUrl || '').trim();
+            const key = (p.apiKey || '').trim();
+            const baseOk = base.startsWith('http://') || base.startsWith('https://');
+            const keyOk = !isPh(key);
+            if (baseOk && (keyOk || id === active)) {
+                kept[id] = p;
+            } else {
+                removed.push(id);
+            }
+        }
+        cfg.models = cfg.models || {};
+        cfg.models.providers = kept;
+        fs.writeFileSync(path, JSON.stringify(cfg, null, 2) + '\n');
+        if (removed.length) console.log('[init] 已过滤未完整配置的 provider: ' + removed.join(', ') + '（在 .env 补全对应 API Key / Base URL 后重新生成即可启用）');
+    " 2>/dev/null || echo "[warn] provider 过滤失败，请检查 ${CONFIG_FILE}"
+fi
+
 # ---- 3.5 确保 feishu 插件被显式信任（官方 CLI，最可靠；每次启动幂等）----
 # OpenClaw v2026.7.x 安全策略要求：非 bundled 插件必须在 plugins.allow 中显式声明，
 # 否则仅“discovered”状态，控制 UI 显示 not configured / 无法编辑 accounts。
