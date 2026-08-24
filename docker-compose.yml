@@ -70,6 +70,8 @@ services:
     environment:
       - TZ=${TZ}
       - LLM_PLATFORM=${LLM_PLATFORM}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-devpilot-litellm}
+      - LITELLM_PROXY_URL=${LITELLM_PROXY_URL:-http://litellm:4000}
 
       # Agnes AI 平台
       - AGNES_API_KEY=${AGNES_API_KEY}
@@ -149,6 +151,8 @@ services:
     environment:
       - TZ=${TZ}
       - LLM_PLATFORM=${LLM_PLATFORM}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-devpilot-litellm}
+      - LITELLM_PROXY_URL=${LITELLM_PROXY_URL:-http://litellm:4000}
 
       # Agnes AI 平台
       - AGNES_API_KEY=${AGNES_API_KEY}
@@ -214,6 +218,65 @@ services:
           memory: 768M
         reservations:
           memory: 512M
+
+  # ============================================================
+  # LiteLLM 代理（复刻 CC-Switch 官方"本地路由"）
+  # 暴露 Anthropic Messages /v1/messages 端点，翻译成 OpenAI Chat Completions
+  # 转发给各平台（agnes/deepseek/glm/ark/bailian）。
+  # 由 conf/litellm/gen_config.py 在容器启动时根据 .env 各平台 API Key
+  # 生成 /app/litellm_config.yaml，Claude Code 通过 http://litellm:4000 访问。
+  # ============================================================
+  litellm:
+    build:
+      context: .
+      dockerfile: dockerfiles/litellm/Dockerfile
+      args:
+        LITELLM_VERSION: ${LITELLM_VERSION}
+    container_name: devpilot-litellm
+    restart: unless-stopped
+    profiles: ["", "full", "dev"]
+    environment:
+      - TZ=${TZ}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-devpilot-litellm}
+
+      # 5 个平台凭据与端点（仅 key 有效的平台会被 gen_config.py 注册为模型）
+      - AGNES_API_KEY=${AGNES_API_KEY}
+      - AGNES_BASE_URL=${AGNES_BASE_URL}
+      - AGNES_MODEL=${AGNES_MODEL}
+
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL}
+
+      - GLM_API_KEY=${GLM_API_KEY}
+      - GLM_BASE_URL=${GLM_BASE_URL}
+      - GLM_MODEL=${GLM_MODEL}
+
+      - ARK_API_KEY=${ARK_API_KEY}
+      - ARK_BASE_URL=${ARK_BASE_URL}
+      - ARK_MODEL=${ARK_MODEL}
+
+      - BAILIAN_API_KEY=${BAILIAN_API_KEY}
+      - BAILIAN_BASE_URL=${BAILIAN_BASE_URL}
+      - BAILIAN_MODEL=${BAILIAN_MODEL}
+    ports:
+      - "4000:4000"
+    networks:
+      - devpilot-network
+    logging: *default-logging
+    healthcheck:
+      # python:3.13-slim 镜像默认无 curl，用 python urllib 直接探测
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=5); sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
 
 networks:
   devpilot-network:
