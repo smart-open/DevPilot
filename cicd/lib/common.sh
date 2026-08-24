@@ -249,8 +249,8 @@ remove_container_if_exists() {
 # 用法: create_data_dirs "${PROJECT_ROOT}"
 create_data_dirs() {
     local root="$1"
-    mkdir -p "${root}/data/redis" "${root}/data/openclaw" "${root}/data/cc-switch-claude"
-    mkdir -p "${root}/logs/redis" "${root}/logs/openclaw" "${root}/logs/cc-switch-claude"
+    mkdir -p "${root}/data/redis" "${root}/data/openclaw" "${root}/data/devpilot-claude"
+    mkdir -p "${root}/logs/redis" "${root}/logs/openclaw" "${root}/logs/devpilot-claude"
     mkdir -p "${root}/workspace"
     touch "${root}/workspace/.gitkeep"
 }

@@ -53,7 +53,7 @@ OpenClaw 全限定名称
 CC-Switch + Claude Code 全限定名称
 */}}
 {{- define "devpilot.ccSwitchClaude.fullname" -}}
-{{- printf "%s-cc-switch-claude" (include "devpilot.name" .) -}}
+{{- printf "%s-devpilot-claude" (include "devpilot.name" .) -}}
 {{- end -}}
 
 {{/*

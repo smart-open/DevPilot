@@ -214,8 +214,8 @@ if [ "${DEPLOY_MODE}" = "compose" ]; then
     info "在远程主机创建数据目录 ..."
     # 使用一个临时容器创建目录（挂载宿主机路径）
     docker run --rm -v /:/host alpine sh -c "
-        mkdir -p /host/data/redis /host/data/openclaw /host/data/cc-switch-claude
-        mkdir -p /host/logs/redis /host/logs/openclaw /host/logs/cc-switch-claude
+        mkdir -p /host/data/redis /host/data/openclaw /host/data/devpilot-claude
+        mkdir -p /host/logs/redis /host/logs/openclaw /host/logs/devpilot-claude
         mkdir -p /host/workspace
         touch /host/workspace/.gitkeep
     " 2>/dev/null || warn "远程目录创建可能需要手动执行（权限问题）"
@@ -258,8 +258,8 @@ else
         --build-arg "CC_SWITCH_VERSION=${CC_SWITCH_VERSION}" \
         --build-arg "CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION}" \
         --build-arg "NODE_IMAGE_TAG=${NODE_IMAGE_TAG}" \
-        -t devpilot-cc-switch-claude:latest \
-        -f dockerfiles/cc-switch-claude/Dockerfile \
+        -t devpilot-claude:latest \
+        -f dockerfiles/devpilot-claude/Dockerfile \
         .
     success "CC-Switch+Claude 镜像远程构建完成"
 
@@ -267,7 +267,7 @@ else
     info "清理远程旧容器 ..."
     remove_container_if_exists "devpilot-redis"
     remove_container_if_exists "devpilot-openclaw"
-    remove_container_if_exists "devpilot-cc-switch-claude"
+    remove_container_if_exists "devpilot-claude"
     success "远程旧容器清理完成"
 
     # 启动 Redis
@@ -305,10 +305,10 @@ else
     info "远程启动 CC-Switch+Claude 容器 ..."
     AGNES_MODEL_VALUE="${AGNES_MODEL_FLASH:-agnes-2.5-flash}"
     docker run -d \
-        --name devpilot-cc-switch-claude \
+        --name devpilot-claude \
         --restart unless-stopped \
         --network "${NETWORK_NAME}" \
-        --network-alias cc-switch-claude \
+        --network-alias devpilot-claude \
         -e "TZ=${TZ}" \
         -e "HOME=/home/node" \
         -e "PORT=${CC_SWITCH_WEB_PORT}" \
@@ -321,7 +321,7 @@ else
         -e "DEVPILOT_AUTO_DEPLOY=${DEVPILOT_AUTO_DEPLOY:-false}" \
         -p "${CC_SWITCH_WEB_PORT}:${CC_SWITCH_WEB_PORT}" \
         -i -t \
-        devpilot-cc-switch-claude:latest
+        devpilot-claude:latest
     success "远程 CC-Switch+Claude 容器已启动"
 fi
 

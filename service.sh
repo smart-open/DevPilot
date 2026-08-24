@@ -12,7 +12,7 @@ set -e
 #   ./service.sh status                 # 查看容器状态
 #   ./service.sh health                 # 健康检查
 #   ./service.sh model                  # 查看当前大模型平台配置
-#   ./service.sh logs [service]         # 查看日志（service: redis/openclaw/cc-switch-claude）
+#   ./service.sh logs [service]         # 查看日志（service: redis/openclaw/devpilot-claude）
 #   ./service.sh help                   # 显示帮助
 #
 # 调试模式：
@@ -228,7 +228,7 @@ verify_container_model() {
     # ============================================================
     # 检查 2-5: CC-Switch 容器（如果存在）
     # ============================================================
-    local cc_container="devpilot-cc-switch-claude"
+    local cc_container="devpilot-claude"
     if docker inspect "${cc_container}" &>/dev/null; then
 
         # ---- 检查 2/5: CC-Switch LLM_PLATFORM ----
@@ -260,7 +260,7 @@ verify_container_model() {
                 error "  -> 配置文件: ${cc_config}"
                 error "  -> 当前值:   ${active_provider}"
                 error "  -> 期望值:   ${expected_provider}"
-                error "  -> 修复：删除 data/cc-switch-claude/.cc-switch/config.json 后运行 ./service.sh restart"
+                error "  -> 修复：删除 data/devpilot-claude/.cc-switch/config.json 后运行 ./service.sh restart"
                 error_details="${error_details}\n  [FAIL] ${cc_container} | activeProvider | 当前=${active_provider} vs 期望=${expected_provider}"
                 found_errors=1
             else
@@ -341,10 +341,10 @@ verify_container_model() {
             echo "API 地址: ${LLM_BASE_URL}"
             echo "检查项:"
             echo "  [1/5] ${container_name} LLM_PLATFORM: 一致"
-            echo "  [2/5] devpilot-cc-switch-claude LLM_PLATFORM: 一致"
-            echo "  [3/5] devpilot-cc-switch-claude activeProvider: 一致"
-            echo "  [4/5] devpilot-cc-switch-claude ANTHROPIC_BASE_URL: 一致"
-            echo "  [5/5] devpilot-cc-switch-claude ANTHROPIC_MODEL: 一致"
+            echo "  [2/5] devpilot-claude LLM_PLATFORM: 一致"
+            echo "  [3/5] devpilot-claude activeProvider: 一致"
+            echo "  [4/5] devpilot-claude ANTHROPIC_BASE_URL: 一致"
+            echo "  [5/5] devpilot-claude ANTHROPIC_MODEL: 一致"
             echo "  API Key: 已设置且非占位符"
         } >> "${LOG_FILE}"
     else
@@ -361,7 +361,7 @@ verify_container_model() {
         echo ""
         warn "修复建议："
         echo -e "  1. 容器环境变量不一致 -> 运行 ${GREEN}./service.sh restart${NC} 重建容器"
-        echo -e "  2. activeProvider 不一致 -> 删除 ${GREEN}data/cc-switch-claude/.cc-switch/config.json${NC} 后重启"
+        echo -e "  2. activeProvider 不一致 -> 删除 ${GREEN}data/devpilot-claude/.cc-switch/config.json${NC} 后重启"
         echo -e "  3. API Key 为占位符 -> 编辑 ${GREEN}.env${NC} 设置真实 API Key"
         echo ""
         {
@@ -377,7 +377,7 @@ verify_container_model() {
             echo ""
             echo "修复建议:"
             echo "  1. 容器环境变量不一致 -> 运行 ./service.sh restart 重建容器"
-            echo "  2. activeProvider 不一致 -> 删除 data/cc-switch-claude/.cc-switch/config.json 后重启"
+            echo "  2. activeProvider 不一致 -> 删除 data/devpilot-claude/.cc-switch/config.json 后重启"
             echo "  3. API Key 为占位符 -> 编辑 .env 设置真实 API Key"
         } >> "${LOG_FILE}"
     fi
@@ -641,7 +641,7 @@ do_status() {
     } >> "${LOG_FILE}"
 
     docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}" \
-        devpilot-redis devpilot-openclaw devpilot-cc-switch-claude 2>&1 | while IFS= read -r line; do
+        devpilot-redis devpilot-openclaw devpilot-claude 2>&1 | while IFS= read -r line; do
         echo "${line}"
         echo "${line}" >> "${LOG_FILE}"
     done || warn "无法获取资源使用"
@@ -709,7 +709,7 @@ do_health() {
     fi
 
     echo -e "${CYAN}Claude Code:${NC} "
-    if docker exec devpilot-cc-switch-claude claude --version 2>/dev/null; then
+    if docker exec devpilot-claude claude --version 2>/dev/null; then
         success "OK"
         echo "Claude Code: OK" >> "${LOG_FILE}"
     else
@@ -754,7 +754,7 @@ do_logs() {
         case "${service}" in
             redis)        service="redis" ;;
             openclaw|bot) service="openclaw" ;;
-            cc-switch|cc|claude) service="cc-switch-claude" ;;
+            cc-switch|cc|claude) service="devpilot-claude" ;;
         esac
         info "查看 ${service} 日志（Ctrl+C 退出）..."
         docker compose --env-file .env logs -f --tail 100 "${service}"
@@ -784,7 +784,7 @@ show_help() {
     echo -e "  ${GREEN}status${NC}                查看容器状态和资源使用"
     echo -e "  ${GREEN}health${NC}                健康检查（Redis/OpenClaw/CC-Switch/Claude/模型配置）"
     echo -e "  ${GREEN}model${NC}                 查看当前大模型平台配置和验证结果"
-    echo -e "  ${GREEN}logs${NC}   [service]      查看日志（redis/openclaw/cc-switch-claude）"
+    echo -e "  ${GREEN}logs${NC}   [service]      查看日志（redis/openclaw/devpilot-claude）"
     echo -e "  ${GREEN}help${NC}                  显示此帮助"
     echo ""
     echo -e "${CYAN}部署模式:${NC}"

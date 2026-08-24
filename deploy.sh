@@ -153,7 +153,7 @@ mask_secret() {
 # - OpenClaw Token 优先取 .env（非空 + 非占位符），否则从 data/openclaw/.openclaw/openclaw.json
 #   的 gateway.token 字段读取（容器自动生成场景）；
 # - 若 openclaw.json 读到了真实 token 且 .env 仍是占位符/缺失，会回写到 .env 以保持一致；
-# - CC-Switch 密码从 data/cc-switch-claude/.cc-switch/web_password 读取。
+# - CC-Switch 密码从 data/devpilot-claude/.cc-switch/web_password 读取。
 print_credentials() {
     local openclaw_token="" web_password="" token_source=""
     local env_token tmp
@@ -184,11 +184,11 @@ print_credentials() {
     fi
 
     # 2) CC-Switch Web 密码
-    if [ -f "data/cc-switch-claude/.cc-switch/web_password" ]; then
-        web_password="$(cat data/cc-switch-claude/.cc-switch/web_password 2>/dev/null | tr -d '[:space:]')"
+    if [ -f "data/devpilot-claude/.cc-switch/web_password" ]; then
+        web_password="$(cat data/devpilot-claude/.cc-switch/web_password 2>/dev/null | tr -d '[:space:]')"
     fi
     if [ -z "${web_password}" ]; then
-        web_password="（未找到，请确认 cc-switch 容器已启动后查看 data/cc-switch-claude/.cc-switch/web_password）"
+        web_password="（未找到，请确认 cc-switch 容器已启动后查看 data/devpilot-claude/.cc-switch/web_password）"
     fi
 
     # 控制台（带颜色）
@@ -208,7 +208,7 @@ print_credentials() {
     echo "  本机访问:        http://localhost:${WEB_PORT}/"
     echo "  用户名:          admin"
     echo "  密码:            ${web_password}"
-    echo "  密码文件:        data/cc-switch-claude/.cc-switch/web_password"
+    echo "  密码文件:        data/devpilot-claude/.cc-switch/web_password"
     echo ""
     echo -e "${CYAN}飞书机器人${NC}"
     echo "  在飞书中搜索机器人（AppID 见 .env FEISHU_APP_ID），发消息即获 AI 回复"
@@ -225,7 +225,7 @@ print_credentials() {
         echo "CC-Switch Web:    http://<VM_IP>:${WEB_PORT}/"
         echo "  用户名:      admin"
         echo "  密码:        ${web_password}"
-        echo "  密码文件:    data/cc-switch-claude/.cc-switch/web_password"
+        echo "  密码文件:    data/devpilot-claude/.cc-switch/web_password"
     } >> "${LOG_FILE}"
 }
 
@@ -320,16 +320,16 @@ step_end
 step_begin 2 "创建数据目录"
 
 detail "创建 data/ 目录..."
-mkdir -p data/redis data/openclaw data/cc-switch-claude
+mkdir -p data/redis data/openclaw data/devpilot-claude
 detail "  data/redis/         - Redis 持久化"
 detail "  data/openclaw/      - OpenClaw 配置"
-detail "  data/cc-switch-claude/ - CC-Switch 数据"
+detail "  data/devpilot-claude/ - CC-Switch 数据"
 
 detail "创建 logs/ 目录..."
-mkdir -p logs/redis logs/openclaw logs/cc-switch-claude
+mkdir -p logs/redis logs/openclaw logs/devpilot-claude
 detail "  logs/redis/          - Redis 日志"
 detail "  logs/openclaw/       - OpenClaw 日志"
-detail "  logs/cc-switch-claude/ - CC-Switch 日志"
+detail "  logs/devpilot-claude/ - CC-Switch 日志"
 
 detail "创建 workspace/ 目录..."
 mkdir -p workspace
@@ -443,7 +443,7 @@ step_begin 4 "构建 Docker 镜像"
 
 detail "构建配置:"
 detail "  OpenClaw Dockerfile:    dockerfiles/openclaw/Dockerfile"
-detail "  CC-Switch Dockerfile:   dockerfiles/cc-switch-claude/Dockerfile"
+detail "  CC-Switch Dockerfile:   dockerfiles/devpilot-claude/Dockerfile"
 detail "  构建上下文:             ${SCRIPT_DIR}"
 detail "  .dockerignore:          已启用"
 
@@ -483,7 +483,7 @@ docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/nul
 done
 
 # 逐容器检查
-for container in devpilot-redis devpilot-openclaw devpilot-cc-switch-claude; do
+for container in devpilot-redis devpilot-openclaw devpilot-claude; do
     detail "检查容器: ${container}"
     if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
         local_status=$(docker inspect --format '{{.State.Status}}' "${container}" 2>/dev/null)
@@ -550,7 +550,7 @@ echo "  OpenClaw:     http://localhost:${GATEWAY_PORT}"
 echo "  CC-Switch:    http://localhost:${WEB_PORT}"
 echo ""
 echo -e "${CYAN}常用命令:${NC}"
-echo "  启动 Claude Code:   docker compose exec cc-switch-claude claude"
+echo "  启动 Claude Code:   docker compose exec devpilot-claude claude"
 echo "  查看日志:          docker compose logs -f"
 echo "  查看状态:          docker compose ps"
 echo "  健康检查:          make health"

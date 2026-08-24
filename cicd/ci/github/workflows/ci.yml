@@ -60,7 +60,7 @@ jobs:
       - name: 检查 Dockerfile 是否存在
         run: |
           echo "==> 检查 Dockerfile 是否存在 ..."
-          for df in dockerfiles/openclaw/Dockerfile dockerfiles/cc-switch-claude/Dockerfile; do
+          for df in dockerfiles/openclaw/Dockerfile dockerfiles/devpilot-claude/Dockerfile; do
             if [ -f "$df" ]; then
               echo "  [OK] $df"
             else
@@ -159,7 +159,7 @@ jobs:
   # ============================================================
   # 任务 3：构建并推送 Docker 镜像（CC-Switch + Claude Code）
   # ============================================================
-  build-cc-switch-claude:
+  build-devpilot-claude:
     name: 构建镜像 (CC-Switch+Claude)
     needs: lint
     runs-on: ubuntu-latest
@@ -182,7 +182,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/cc-switch-claude
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/devpilot-claude
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -196,7 +196,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: dockerfiles/cc-switch-claude/Dockerfile
+          file: dockerfiles/devpilot-claude/Dockerfile
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -204,30 +204,30 @@ jobs:
             CC_SWITCH_VERSION=${{ env.CC_SWITCH_VERSION }}
             CLAUDE_CODE_VERSION=${{ env.CLAUDE_CODE_VERSION }}
             NODE_IMAGE_TAG=${{ env.NODE_IMAGE_TAG }}
-          cache-from: type=gha,scope=cc-switch-claude
-          cache-to: type=gha,mode=max,scope=cc-switch-claude
+          cache-from: type=gha,scope=devpilot-claude
+          cache-to: type=gha,mode=max,scope=devpilot-claude
 
       - name: 导出镜像供扫描使用
         if: github.event_name == 'push'
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: dockerfiles/cc-switch-claude/Dockerfile
+          file: dockerfiles/devpilot-claude/Dockerfile
           push: false
           load: true
-          tags: devpilot-cc-switch-claude:ci-scan
+          tags: devpilot-claude:ci-scan
           build-args: |
             CC_SWITCH_VERSION=${{ env.CC_SWITCH_VERSION }}
             CLAUDE_CODE_VERSION=${{ env.CLAUDE_CODE_VERSION }}
             NODE_IMAGE_TAG=${{ env.NODE_IMAGE_TAG }}
-          cache-from: type=gha,scope=cc-switch-claude
+          cache-from: type=gha,scope=devpilot-claude
 
   # ============================================================
   # 任务 4：Trivy 安全扫描
   # ============================================================
   security-scan:
     name: 安全扫描 (Trivy)
-    needs: [build-openclaw, build-cc-switch-claude]
+    needs: [build-openclaw, build-devpilot-claude]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -258,10 +258,10 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: dockerfiles/cc-switch-claude/Dockerfile
+          file: dockerfiles/devpilot-claude/Dockerfile
           push: false
           load: true
-          tags: devpilot-cc-switch-claude:ci-scan
+          tags: devpilot-claude:ci-scan
           build-args: |
             CC_SWITCH_VERSION=${{ env.CC_SWITCH_VERSION }}
             CLAUDE_CODE_VERSION=${{ env.CLAUDE_CODE_VERSION }}
@@ -279,7 +279,7 @@ jobs:
       - name: Trivy 扫描 CC-Switch+Claude 镜像
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: devpilot-cc-switch-claude:ci-scan
+          image-ref: devpilot-claude:ci-scan
           format: sarif
           output: trivy-cc-switch-results.sarif
           exit-code: "0"

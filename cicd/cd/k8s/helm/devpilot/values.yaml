@@ -87,7 +87,7 @@ openclaw:
 # ---- CC-Switch + Claude Code 配置 ----
 ccSwitchClaude:
   # 镜像地址（需替换为实际镜像仓库地址）
-  image: "devpilot-cc-switch-claude:latest"
+  image: "devpilot-claude:latest"
   ccSwitchVersion: "v0.21.0"
   claudeCodeVersion: "2.1.220"
   # Web UI 端口

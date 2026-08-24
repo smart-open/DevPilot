@@ -39,7 +39,7 @@ variables:
   DOCKER_TLS_CERTDIR: "/certs"
   # GitLab 镜像仓库前缀（使用内置 CI_REGISTRY_IMAGE 变量）
   IMAGE_OPENCLAW: "${CI_REGISTRY_IMAGE}/openclaw"
-  IMAGE_CC_SWITCH_CLAUDE: "${CI_REGISTRY_IMAGE}/cc-switch-claude"
+  IMAGE_CC_SWITCH_CLAUDE: "${CI_REGISTRY_IMAGE}/devpilot-claude"
   # 镜像缓存配置
   GIT_DEPTH: "1"
 
@@ -81,7 +81,7 @@ lint:dockerfiles:
   script:
     - echo "==> 检查 Dockerfile 是否存在 ..."
     - |
-      for df in dockerfiles/openclaw/Dockerfile dockerfiles/cc-switch-claude/Dockerfile; do
+      for df in dockerfiles/openclaw/Dockerfile dockerfiles/devpilot-claude/Dockerfile; do
         if [ -f "$df" ]; then
           echo "  [OK] $df"
         else
@@ -159,7 +159,7 @@ build:openclaw:
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
     - when: manual
 
-build:cc-switch-claude:
+build:devpilot-claude:
   stage: build
   needs: ["lint:shell-scripts", "lint:dockerfiles", "lint:compose", "lint:env-template"]
   script:
@@ -175,13 +175,13 @@ build:cc-switch-claude:
         -t ${IMAGE_CC_SWITCH_CLAUDE}:${CC_SWITCH_VERSION} \
         -t ${IMAGE_CC_SWITCH_CLAUDE}:latest \
         -t ${IMAGE_CC_SWITCH_CLAUDE}:${CI_COMMIT_SHORT_SHA} \
-        -f dockerfiles/cc-switch-claude/Dockerfile \
+        -f dockerfiles/devpilot-claude/Dockerfile \
         .
     - echo "  [OK] CC-Switch+Claude 镜像构建完成"
-    - docker save ${IMAGE_CC_SWITCH_CLAUDE}:${CI_COMMIT_SHORT_SHA} -o cc-switch-claude-image.tar
+    - docker save ${IMAGE_CC_SWITCH_CLAUDE}:${CI_COMMIT_SHORT_SHA} -o devpilot-claude-image.tar
   artifacts:
     paths:
-      - cc-switch-claude-image.tar
+      - devpilot-claude-image.tar
     expire_in: 1 hour
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -207,14 +207,14 @@ push:openclaw:
   rules:
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
 
-push:cc-switch-claude:
+push:devpilot-claude:
   stage: push
-  needs: ["build:cc-switch-claude"]
+  needs: ["build:devpilot-claude"]
   script:
     - echo "==> 登录 GitLab 镜像仓库 ..."
     - docker login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
     - echo "==> 加载 CC-Switch+Claude 镜像 ..."
-    - docker load -i cc-switch-claude-image.tar
+    - docker load -i devpilot-claude-image.tar
     - echo "==> 推送 CC-Switch+Claude 镜像 ..."
     - docker push ${IMAGE_CC_SWITCH_CLAUDE}:${CC_SWITCH_VERSION}
     - docker push ${IMAGE_CC_SWITCH_CLAUDE}:latest
@@ -252,9 +252,9 @@ scan:openclaw:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
 
-scan:cc-switch-claude:
+scan:devpilot-claude:
   stage: scan
-  needs: ["build:cc-switch-claude"]
+  needs: ["build:devpilot-claude"]
   image:
     name: aquasec/trivy:latest
     entrypoint: [""]
@@ -263,7 +263,7 @@ scan:cc-switch-claude:
     TRIVY_CACHE_DIR: "/trivy-cache"
   script:
     - echo "==> Trivy 扫描 CC-Switch+Claude 镜像 ..."
-    - docker load -i cc-switch-claude-image.tar
+    - docker load -i devpilot-claude-image.tar
     - trivy image --severity CRITICAL,HIGH --exit-code 0 --format json --output trivy-cc-switch-report.json ${IMAGE_CC_SWITCH_CLAUDE}:${CI_COMMIT_SHORT_SHA}
     - trivy image --severity CRITICAL,HIGH --exit-code 0 --format table ${IMAGE_CC_SWITCH_CLAUDE}:${CI_COMMIT_SHORT_SHA}
     - echo "  [OK] CC-Switch+Claude 镜像扫描完成"

@@ -90,9 +90,9 @@ docker build \
     --build-arg "CC_SWITCH_VERSION=${CC_SWITCH_VERSION}" \
     --build-arg "CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION}" \
     --build-arg "NODE_IMAGE_TAG=${NODE_IMAGE_TAG}" \
-    -t devpilot-cc-switch-claude:latest \
-    -t "devpilot-cc-switch-claude:${CC_SWITCH_VERSION}" \
-    -f dockerfiles/cc-switch-claude/Dockerfile \
+    -t devpilot-claude:latest \
+    -t "devpilot-claude:${CC_SWITCH_VERSION}" \
+    -f dockerfiles/devpilot-claude/Dockerfile \
     .
 success "CC-Switch+Claude 镜像构建完成"
 
@@ -102,7 +102,7 @@ success "CC-Switch+Claude 镜像构建完成"
 info "清理旧容器（如存在） ..."
 remove_container_if_exists "devpilot-redis"
 remove_container_if_exists "devpilot-openclaw"
-remove_container_if_exists "devpilot-cc-switch-claude"
+remove_container_if_exists "devpilot-claude"
 success "旧容器清理完成"
 
 # ============================================================
@@ -220,10 +220,10 @@ case "${LLM_PLATFORM:-agnes}" in
 esac
 
 docker run -d \
-    --name devpilot-cc-switch-claude \
+    --name devpilot-claude \
     --restart unless-stopped \
     --network "${NETWORK_NAME}" \
-    --network-alias cc-switch-claude \
+    --network-alias devpilot-claude \
     -e "TZ=${TZ}" \
     -e "HOME=/home/node" \
     -e "PORT=${CC_SWITCH_WEB_PORT}" \
@@ -246,11 +246,11 @@ docker run -d \
     -e "CC_SWITCH_WEB_PASSWORD=${CC_SWITCH_WEB_PASSWORD}" \
     -e "ALLOW_HTTP_BASIC_OVER_HTTP=1" \
     -v "${PROJECT_ROOT}/workspace:/workspace" \
-    -v "${PROJECT_ROOT}/data/cc-switch-claude:/home/node" \
-    -v "${PROJECT_ROOT}/logs/cc-switch-claude:/logs" \
+    -v "${PROJECT_ROOT}/data/devpilot-claude:/home/node" \
+    -v "${PROJECT_ROOT}/logs/devpilot-claude:/logs" \
     -p "${CC_SWITCH_WEB_PORT}:${CC_SWITCH_WEB_PORT}" \
     -i -t \
-    devpilot-cc-switch-claude:latest
+    devpilot-claude:latest
 
 success "CC-Switch+Claude 容器已启动 (端口 ${CC_SWITCH_WEB_PORT})"
 
@@ -277,7 +277,7 @@ echo ""
 echo -e "${CYAN}常用命令：${NC}"
 echo -e "  查看日志:     docker logs -f devpilot-openclaw"
 echo -e "  进入容器:     docker exec -it devpilot-openclaw bash"
-echo -e "  使用 Claude:  docker exec -it devpilot-cc-switch-claude claude"
-echo -e "  停止容器:     docker stop devpilot-redis devpilot-openclaw devpilot-cc-switch-claude"
-echo -e "  删除容器:     docker rm -f devpilot-redis devpilot-openclaw devpilot-cc-switch-claude"
+echo -e "  使用 Claude:  docker exec -it devpilot-claude claude"
+echo -e "  停止容器:     docker stop devpilot-redis devpilot-openclaw devpilot-claude"
+echo -e "  删除容器:     docker rm -f devpilot-redis devpilot-openclaw devpilot-claude"
 echo ""

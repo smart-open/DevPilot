@@ -132,15 +132,15 @@ services:
   # ============================================================
   # CC-Switch + Claude Code：合体容器
   # ============================================================
-  cc-switch-claude:
+  devpilot-claude:
     build:
       context: .
-      dockerfile: dockerfiles/cc-switch-claude/Dockerfile
+      dockerfile: dockerfiles/devpilot-claude/Dockerfile
       args:
         CC_SWITCH_VERSION: ${CC_SWITCH_VERSION:-v0.21.0}
         CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.241}
         NODE_IMAGE_TAG: ${NODE_IMAGE_TAG}
-    container_name: devpilot-cc-switch-claude
+    container_name: devpilot-claude
     restart: unless-stopped
     profiles: ["", "full", "dev"]
     stdin_open: true
@@ -197,8 +197,8 @@ services:
       - ALLOW_HTTP_BASIC_OVER_HTTP=1
     volumes:
       - ./workspace:/workspace
-      - ./data/cc-switch-claude:/home/node
-      - ./logs/cc-switch-claude:/logs
+      - ./data/devpilot-claude:/home/node
+      - ./logs/devpilot-claude:/logs
     ports:
       - "${CC_SWITCH_WEB_PORT}:${CC_SWITCH_WEB_PORT}"
     networks:

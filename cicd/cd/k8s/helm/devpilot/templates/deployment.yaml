@@ -1,6 +1,6 @@
 {{/*
 DevPilot Helm Chart - Deployments
-包含 Redis、OpenClaw、CC-Switch+Claude Code 三个 Deployment
+包含 Redis、OpenClaw、Claude Code 三个 Deployment
 */}}
 
 # ============================================================
@@ -378,7 +378,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-        - name: cc-switch-claude
+        - name: devpilot-claude
           image: {{ .Values.ccSwitchClaude.image | quote }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           {{- if .Values.ccSwitchClaude.interactive }}

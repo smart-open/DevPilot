@@ -59,9 +59,9 @@ restart: ## 重启所有服务
 restart-openclaw: ## 仅重启 OpenClaw
 	$(COMPOSE) restart openclaw
 
-.PHONY: restart-cc-switch
-restart-cc-switch: ## 仅重启 CC-Switch+Claude Code
-	$(COMPOSE) restart cc-switch-claude
+.PHONY: restart-claude
+restart-claude: ## 仅重启 Claude Code
+	$(COMPOSE) restart devpilot-claude
 
 .PHONY: restart-redis
 restart-redis: ## 仅重启 Redis
@@ -77,9 +77,9 @@ logs: ## 查看所有服务日志（实时）
 logs-openclaw: ## 查看 OpenClaw 日志
 	$(COMPOSE) logs -f openclaw
 
-.PHONY: logs-cc-switch
-logs-cc-switch: ## 查看 CC-Switch+Claude Code 日志
-	$(COMPOSE) logs -f cc-switch-claude
+.PHONY: logs-claude
+logs-claude: ## 查看 Claude Code 日志
+	$(COMPOSE) logs -f devpilot-claude
 
 .PHONY: logs-redis
 logs-redis: ## 查看 Redis 日志
@@ -101,17 +101,17 @@ health: ## 健康检查所有服务
 	@printf "CC-Switch: "
 	@curl -s http://localhost:$$(grep CC_SWITCH_WEB_PORT .env | cut -d= -f2) >/dev/null 2>&1 && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
 	@printf "Claude:    "
-	@$(COMPOSE) exec -T cc-switch-claude claude --version 2>/dev/null && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
+	@$(COMPOSE) exec -T devpilot-claude claude --version 2>/dev/null && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
 
 ##@ 容器交互
 
 .PHONY: shell
 shell: ## 进入 CC-Switch+Claude 容器 bash
-	$(COMPOSE) exec cc-switch-claude bash
+	$(COMPOSE) exec devpilot-claude bash
 
 .PHONY: claude
 claude: ## 启动 Claude Code 交互式会话
-	$(COMPOSE) exec cc-switch-claude claude
+	$(COMPOSE) exec devpilot-claude claude
 
 .PHONY: redis-cli
 redis-cli: ## 进入 Redis CLI

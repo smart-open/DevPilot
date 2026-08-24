@@ -271,7 +271,7 @@ health_check_docker() {
     fi
 
     # CC-Switch Web（从宿主机访问 Web 端口）
-    if docker ps --format '{{.Names}}' | grep -q "devpilot-cc-switch-claude"; then
+    if docker ps --format '{{.Names}}' | grep -q "devpilot-claude"; then
         wait_for_http "CC-Switch Web" "http://127.0.0.1:${CC_SWITCH_WEB_PORT}" 3 2 || true
     else
         warn "CC-Switch Web: 容器未运行"
@@ -339,6 +339,6 @@ echo -e "  CC-Switch Web UI:  http://localhost:${CC_SWITCH_WEB_PORT}"
 echo ""
 echo -e "${CYAN}下一步：${NC}"
 echo -e "  1. 浏览器访问 CC-Switch Web UI（agnes-ai 供应商已自动配置）"
-echo -e "  2. 使用 Claude Code: docker exec -it devpilot-cc-switch-claude claude"
+echo -e "  2. 使用 Claude Code: docker exec -it devpilot-claude claude"
 echo -e "  3. 在飞书中测试机器人回复"
 echo ""

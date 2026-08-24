@@ -6,16 +6,16 @@
 #   - 启用 BuildKit 以支持缓存挂载（--mount=type=cache）:
 #       export DOCKER_BUILDKIT=1
 #   - 常规构建:
-#       docker build -f dockerfiles/cc-switch-claude/Dockerfile \
+#       docker build -f dockerfiles/devpilot-claude/Dockerfile \
 #         --build-arg CC_SWITCH_VERSION=v0.21.0 \
 #         --build-arg CLAUDE_CODE_VERSION=2.1.220 \
-#         -t devpilot-cc-switch-claude .
+#         -t devpilot-claude .
 #   - 强制无缓存重建（排查问题 / 跳过所有缓存层）:
-#       docker build --no-cache -f dockerfiles/cc-switch-claude/Dockerfile -t devpilot-cc-switch-claude .
+#       docker build --no-cache -f dockerfiles/devpilot-claude/Dockerfile -t devpilot-claude .
 ARG NODE_IMAGE_TAG=22.23.1-bookworm
 FROM node:${NODE_IMAGE_TAG}
 
-LABEL org.opencontainers.image.title="devpilot-cc-switch-claude" \
+LABEL org.opencontainers.image.title="devpilot-claude" \
       org.opencontainers.image.description="CC-Switch Web + Claude Code + Git (Combined Container)" \
       org.opencontainers.image.source="https://github.com/devpilot/devpilot" \
       org.opencontainers.image.licenses="MIT" \
@@ -57,7 +57,7 @@ WORKDIR /workspace
 ENV HOME=/home/node
 
 # ---- 复制启动脚本并初始化目录（合并为单层） ----
-COPY conf/cc-switch-claude/start.sh /usr/local/bin/start.sh
+COPY conf/devpilot-claude/start.sh /usr/local/bin/start.sh
 # 修复 Windows 换行符问题
 RUN sed -i 's/\r$//' /usr/local/bin/start.sh \
     && chmod +x /usr/local/bin/start.sh \

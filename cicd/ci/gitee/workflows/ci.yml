@@ -70,7 +70,7 @@ stages:
             script: |
               #!/bin/bash
               echo "==> 检查 Dockerfile 是否存在 ..."
-              for df in dockerfiles/openclaw/Dockerfile dockerfiles/cc-switch-claude/Dockerfile; do
+              for df in dockerfiles/openclaw/Dockerfile dockerfiles/devpilot-claude/Dockerfile; do
                 if [ -f "$df" ]; then
                   echo "  [OK] $df"
                 else
@@ -136,7 +136,7 @@ stages:
 
         # 构建 CC-Switch + Claude Code 镜像
         - step: shell@1
-          name: build-cc-switch-claude
+          name: build-devpilot-claude
           displayName: 构建 CC-Switch+Claude 镜像
           inputs:
             script: |
@@ -147,9 +147,9 @@ stages:
                 --build-arg CC_SWITCH_VERSION=${CC_SWITCH_VERSION} \
                 --build-arg CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION} \
                 --build-arg NODE_IMAGE_TAG=${NODE_IMAGE_TAG} \
-                -t devpilot-cc-switch-claude:${CC_SWITCH_VERSION} \
-                -t devpilot-cc-switch-claude:latest \
-                -f dockerfiles/cc-switch-claude/Dockerfile \
+                -t devpilot-claude:${CC_SWITCH_VERSION} \
+                -t devpilot-claude:latest \
+                -f dockerfiles/devpilot-claude/Dockerfile \
                 .
               echo "  [OK] CC-Switch+Claude 镜像构建完成"
 
@@ -198,7 +198,7 @@ stages:
               echo "  [OK] OpenClaw 镜像推送完成"
 
         - step: shell@1
-          name: push-cc-switch-claude
+          name: push-devpilot-claude
           displayName: 推送 CC-Switch+Claude 镜像
           dependsOn: login-registry
           inputs:
@@ -211,10 +211,10 @@ stages:
               fi
               NAMESPACE="${REGISTRY_NAMESPACE:-devpilot}"
               echo "==> 推送 CC-Switch+Claude 镜像 ..."
-              docker tag devpilot-cc-switch-claude:${CC_SWITCH_VERSION} ${REGISTRY}/${NAMESPACE}/cc-switch-claude:${CC_SWITCH_VERSION}
-              docker tag devpilot-cc-switch-claude:latest ${REGISTRY}/${NAMESPACE}/cc-switch-claude:latest
-              docker push ${REGISTRY}/${NAMESPACE}/cc-switch-claude:${CC_SWITCH_VERSION}
-              docker push ${REGISTRY}/${NAMESPACE}/cc-switch-claude:latest
+              docker tag devpilot-claude:${CC_SWITCH_VERSION} ${REGISTRY}/${NAMESPACE}/devpilot-claude:${CC_SWITCH_VERSION}
+              docker tag devpilot-claude:latest ${REGISTRY}/${NAMESPACE}/devpilot-claude:latest
+              docker push ${REGISTRY}/${NAMESPACE}/devpilot-claude:${CC_SWITCH_VERSION}
+              docker push ${REGISTRY}/${NAMESPACE}/devpilot-claude:latest
               echo "  [OK] CC-Switch+Claude 镜像推送完成"
 
   # ---- 阶段 4：Trivy 安全扫描 ----
@@ -255,7 +255,7 @@ stages:
               echo "  [OK] OpenClaw 镜像扫描完成"
 
         - step: shell@1
-          name: scan-cc-switch-claude
+          name: scan-devpilot-claude
           displayName: 扫描 CC-Switch+Claude 镜像
           dependsOn: install-trivy
           inputs:
@@ -267,7 +267,7 @@ stages:
                 --severity CRITICAL,HIGH \
                 --exit-code 0 \
                 --format table \
-                devpilot-cc-switch-claude:${CC_SWITCH_VERSION}
+                devpilot-claude:${CC_SWITCH_VERSION}
               echo "  [OK] CC-Switch+Claude 镜像扫描完成"
 
         - step: shell@1
