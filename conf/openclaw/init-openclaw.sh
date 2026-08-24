@@ -110,6 +110,30 @@ fi
 # 设为 true 放行（仅建议受信任内网 / 已套反向代理终止 TLS 的场景使用）。
 openclaw config set gateway.controlUi.allowInsecureAuth true 2>/dev/null || true
 
+# ---- 3.1.1 确保 Control UI 允许浏览器来源（allowedOrigins，gateway.bind=lan 时强制校验）----
+# 现象：浏览器经 http://localhost:18789/chat（SSH 隧道 / 端口转发）或 http://<VM_IP>:18789
+# 访问时提示「浏览器来源不被允许 / 将此浏览器来源添加到 gateway.controlUi.allowedOrigins」。
+# 根因：bind=lan 后 Control UI 要求显式白名单 Origin（不支持通配符）。
+# 此处每次启动幂等写入 localhost / 127.0.0.1 / 检测到的 LAN IP 三个来源（含当前端口）。
+if [ -f "${CONFIG_FILE}" ]; then
+    LAN_IP="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -vE '^127\.' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)"
+    PORT="${OPENCLAW_GATEWAY_PORT:-18789}"
+    node -e "
+        const fs = require('fs');
+        const path = '${CONFIG_FILE}';
+        const cfg = JSON.parse(fs.readFileSync(path, 'utf8'));
+        if (!cfg.gateway) cfg.gateway = {};
+        if (!cfg.gateway.controlUi) cfg.gateway.controlUi = {};
+        const port = '${PORT}';
+        const origins = new Set(['http://localhost:' + port, 'http://127.0.0.1:' + port]);
+        const lanIp = '${LAN_IP}';
+        if (lanIp) origins.add('http://' + lanIp + ':' + port);
+        cfg.gateway.controlUi.allowedOrigins = Array.from(origins);
+        fs.writeFileSync(path, JSON.stringify(cfg, null, 2) + '\n');
+        console.log('[init] allowedOrigins = ' + Array.from(origins).join(', '));
+    " 2>/dev/null || echo "[warn] allowedOrigins 设置失败，请手动执行 openclaw config set gateway.controlUi.allowedOrigins"
+fi
+
 # ---- 3.2 强制 Gateway 绑定模式为 lan，避免默认 loopback 导致设备配对/远端访问失败 ----
 # 错误 "Gateway is only bound to loopback. Set gateway.bind=lan..." 即因此。
 # 配置文件模板虽已写 "bind": "lan"，但某些版本 CLI 启动时会回退到 loopback，
