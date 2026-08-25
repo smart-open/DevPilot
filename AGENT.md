@@ -47,6 +47,51 @@
 - **DEVPILOT_HOST_IP**：bridge 模式下 OpenClaw 容器内是 172.x 内网 IP，对浏览器无意义；如要局域网 `http://<LAN_IP>:18789` 访问 Control UI，必须在 `.env` 显式填写宿主机 LAN IP（脚本会写入 `gateway.controlUi.allowedOrigins`）。
 - **litellm 双进程**：合并容器内由 `conf/claude/start.sh` 后台拉起 litellm（venv）+ 前台保活 Claude Code；不再有独立 litellm 容器。
 
+### 命名约定速查（service key vs container_name vs image vs DNS）
+
+同一个容器在 docker compose 与 docker 命令里**名字可能不同**——命令不要混淆：
+
+| 用途 | 命令形式 | 用哪个名字 | claude-litellm 服务示例 |
+|---|---|---|---|
+| `docker compose <cmd> <svc>` | build / restart / logs / ps / exec | **service key**（低前缀） | `docker compose restart claude-litellm` |
+| `docker <cmd> <container>` | exec / logs / stop / rm / inspect / stats | **container_name**（保留品牌） | `docker exec devpilot-claude-litellm bash` |
+| docker image tag | pull / rmi / tag | **image tag**（带 devpilot- 前缀） | `devpilot-claude-litellm:latest` |
+| 跨容器 DNS（URL host） | `env_file:` / URL host 部 | **container_name**（bridge 内 DNS） | `LITELLM_PROXY_URL=http://devpilot-claude-litellm:4000` |
+| 数据持久化目录 | 宿主机路径 | **路径前缀**（与 compose 命名解耦） | `data/devpilot-claude/` |
+
+最易错的两类命令：
+
+```bash
+# ❌ 错用 container_name 当 service key → no such service
+docker compose build devpilot-claude-litellm
+docker compose restart devpilot-claude-litellm
+
+# ❌ 错用 service key 当 container_name → No such container
+docker exec claude-litellm bash
+docker logs claude-litellm
+
+# ✅ service key 用于 docker compose 子命令
+docker compose build claude-litellm
+docker compose restart claude-litellm
+docker compose exec claude-litellm bash
+
+# ✅ container_name 用于 docker 子命令（与 compose cmd 等价，但必须用 container_name）
+docker exec devpilot-claude-litellm bash
+docker logs -f devpilot-claude-litellm
+docker rm -f devpilot-claude-litellm
+```
+
+反向派生（避免又踩错）：
+
+```bash
+docker compose config --services    # 列出全部 service key
+docker compose config | grep container_name    # 列出全部 container_name
+```
+
+历史原因：早期 `docker-compose.yml` 用 `devpilot-*` 作为 service key，导致 compose
+自动 image tag 拼成 `devpilot-devpilot-claude-litellm`（双前缀）；commit 812c51a
++ d4fa69b + bc285b8 解耦为 service key（低前缀）+ container_name（高前缀）两类。
+
 ---
 
 ## 3. 目录与文件速查
