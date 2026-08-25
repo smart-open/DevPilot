@@ -38,7 +38,7 @@ DevPilot CI/CD 体系围绕 3 个 Docker 容器构建：
 |------|---------|------|------|
 | Redis | `redis:8.8.1-alpine` | 8.8.1 | 6379（仅内部） |
 | OpenClaw | `node:22.23.1-bookworm` | `openclaw@2026.7.1-2` | 18789 |
-| Claude Code | `node:22.23.1-bookworm` | `claude-code@2.1.220` | - |
+| Claude Code | `node:22.23.1-bookworm` | `claude-code@2.1.241` | - |
 
 CI 负责代码检查、镜像构建、镜像推送和安全扫描；CD 负责将构建好的镜像部署到不同环境。
 
@@ -152,7 +152,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 ```bash
 NODE_IMAGE_TAG=22.23.1-bookworm      # Node.js 基础镜像版本
 OPENCLAW_VERSION=2026.7.1-2          # OpenClaw 版本
-CLAUDE_CODE_VERSION=2.1.220          # Claude Code 版本
+CLAUDE_CODE_VERSION=2.1.241          # Claude Code 版本
 ```
 
 **加载机制**：
@@ -354,7 +354,7 @@ GitLab Runner 需配置 Docker 执行器并启用 Docker-in-Docker 服务。
 | `NODE_IMAGE_TAG` | `22.23.1-bookworm` | Node.js 基础镜像版本 |
 | `OPENCLAW_VERSION` | `2026.7.1-2` | OpenClaw npm 包版本 |
 
-| `CLAUDE_CODE_VERSION` | `2.1.220` | Claude Code npm 包版本 |
+| `CLAUDE_CODE_VERSION` | `2.1.241` | Claude Code npm 包版本 |
 
 升级组件版本时，修改 `versions.env` 后同步更新对应 CI 配置文件中的默认值。
 
@@ -743,7 +743,7 @@ bash cicd/service-deploy/deploy-service.sh --list
 | `NODE_IMAGE_TAG` | Node.js 基础镜像版本 | `22.23.1-bookworm` |
 | `OPENCLAW_VERSION` | OpenClaw npm 版本 | `2026.7.1-2` |
 
-| `CLAUDE_CODE_VERSION` | Claude Code 版本 | `2.1.220` |
+| `CLAUDE_CODE_VERSION` | Claude Code 版本 | `2.1.241` |
 | `TZ` | 时区 | `Asia/Shanghai` |
 
 ### 可选变量
@@ -765,7 +765,7 @@ CI 流水线和部署脚本通过 `--build-arg` 向 Dockerfile 传递构建参�
 |----------|------|--------|-------------------|
 | `NODE_IMAGE_TAG` | Node.js 基础镜像版本 | `22.23.1-bookworm` | 两个 Dockerfile |
 | `OPENCLAW_VERSION` | OpenClaw npm 版本 | `2026.7.1-2` | `dockerfiles/openclaw/Dockerfile` |
-| `CLAUDE_CODE_VERSION` | Claude Code 版本 | `2.1.220` | `dockerfiles/claude/Dockerfile` |
+| `CLAUDE_CODE_VERSION` | Claude Code 版本 | `2.1.241` | `dockerfiles/claude/Dockerfile` |
 
 **Dockerfile 中的 CRLF 修复**：
 

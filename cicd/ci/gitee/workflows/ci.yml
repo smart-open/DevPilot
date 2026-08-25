@@ -27,7 +27,7 @@ triggers:
 vars:
   NODE_IMAGE_TAG: "22.23.1-bookworm"
   OPENCLAW_VERSION: "2026.7.1-2"
-  CLAUDE_CODE_VERSION: "2.1.220"
+  CLAUDE_CODE_VERSION: "2.1.241"
   # Gitee 容器镜像仓库地址（需在 Gitee Go 变量中配置实际仓库）
   # REGISTRY: registry.cn-beijing.aliyuncs.com  # 或使用 Gitee 镜像仓库
   # NAMESPACE: your-namespace

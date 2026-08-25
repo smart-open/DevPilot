@@ -32,7 +32,7 @@ default:
 variables:
   NODE_IMAGE_TAG: "22.23.1-bookworm"
   OPENCLAW_VERSION: "2026.7.1-2"
-  CLAUDE_CODE_VERSION: "2.1.220"
+  CLAUDE_CODE_VERSION: "2.1.241"
   # Docker-in-Docker 配置
   DOCKER_DRIVER: overlay2
   DOCKER_TLS_CERTDIR: "/certs"
