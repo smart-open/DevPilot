@@ -11,6 +11,11 @@ docker-compose*.yml
 # CI/CD
 cicd/
 
+# 容器内公共函数库需要 COPY 进镜像（commit 1b46d88 引入）；
+# 其它 cicd 子目录仍排除（部署脚本不走镜像路径）。
+!cicd/lib/
+!cicd/lib/common.sh
+
 # 文档
 *.md
 
