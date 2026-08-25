@@ -115,13 +115,20 @@ else
 fi
 
 # ---- 3.1.1 确保 Control UI 允许浏览器来源（allowedOrigins，gateway.bind=lan 时强制校验）----
-# 现象：浏览器经 http://localhost:18789/chat（SSH 隧道 / 端口转发）或 http://<VM_IP>:18789
+# 现象：浏览器经 http://localhost:18789/chat（SSH 隧道 / 端口转发）或 http://<宿主机IP>:18789
 # 访问时提示「浏览器来源不被允许 / 将此浏览器来源添加到 gateway.controlUi.allowedOrigins」。
 # 根因：bind=lan 后 Control UI 要求显式白名单 Origin（不支持通配符）。
-# 此处每次启动幂等写入 localhost / 127.0.0.1 / 检测到的 LAN IP 三个来源（含当前端口）。
+# bridge 模式下容器内 hostname -I 返回 172.x 内网地址，对局域网浏览器无意义；
+# 故优先使用 DEVPILOT_HOST_IP（宿主机可达 IP，由 docker-compose 注入），
+# 留空时退回容器内 IP（localhost / SSH 隧道场景可用）。
+# 此处每次启动幂等写入 localhost / 127.0.0.1 / 宿主可达 IP（含当前端口）。
 if [ -f "${CONFIG_FILE}" ]; then
-    LAN_IP="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -vE '^127\.' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)"
     PORT="${OPENCLAW_GATEWAY_PORT:-18789}"
+    # 优先宿主机可达 IP；未设置则自动探测（bridge 下为容器内网 IP）
+    HOST_IP="${DEVPILOT_HOST_IP:-}"
+    if [ -z "${HOST_IP}" ]; then
+        HOST_IP="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -vE '^127\.' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)"
+    fi
     node -e "
         const fs = require('fs');
         const path = '${CONFIG_FILE}';
@@ -130,7 +137,7 @@ if [ -f "${CONFIG_FILE}" ]; then
         if (!cfg.gateway.controlUi) cfg.gateway.controlUi = {};
         const port = '${PORT}';
         const origins = new Set(['http://localhost:' + port, 'http://127.0.0.1:' + port]);
-        const lanIp = '${LAN_IP}';
+        const lanIp = '${HOST_IP}';
         if (lanIp) origins.add('http://' + lanIp + ':' + port);
         cfg.gateway.controlUi.allowedOrigins = Array.from(origins);
         fs.writeFileSync(path, JSON.stringify(cfg, null, 2) + '\n');
@@ -147,14 +154,13 @@ if [ -f "${CONFIG_FILE}" ]; then
     openclaw config set gateway.port "${OPENCLAW_GATEWAY_PORT:-18789}" 2>/dev/null || true
 fi
 
-# ---- 3.3 OpenClaw 现以 network_mode: host 运行，Redis 必须经宿主机回环访问 ----
-# 无论 openclaw.json 是本次新生成还是历史残留，均确保 redis 地址指向 127.0.0.1:6379，
-# 否则 openclaw 在 host 网络下无法解析 bridge 网络的 "redis" 主机名。
-# 【回退提示】若将来把 openclaw 改回 bridge 网络（加入 devpilot-network），
-#   必须删除下方 sed 改写，让配置保留 redis:6379 服务名访问；
-#   同时 Redis 的 127.0.0.1:6379 端口绑定也可去掉（bridge 内经服务名访问即可）。
+# ---- 3.3 OpenClaw 现已改为 bridge 网络（devpilot-network），Redis 经服务名访问 ----
+# 不再需要把 redis:6379 改写为 127.0.0.1:6379：bridge 模式下容器可通过 Docker
+# 内置 DNS 解析服务名 redis（devpilot-network）直达 Redis 容器，且 Redis 不发布
+# 到宿主机，隔离性更好。此处将历史残留的 @127.0.0.1:6379 修正回 @redis:6379，
+# 以统一走服务名（避免容器无法访问宿主机回环）。
 if [ -f "${CONFIG_FILE}" ]; then
-    sed -i 's#@redis:6379#@127.0.0.1:6379#g' "${CONFIG_FILE}"
+    sed -i 's#@127\.0\.0\.1:6379#@redis:6379#g' "${CONFIG_FILE}"
 fi
 
 # ---- 3.4 修复旧版飞书配置格式 ----
@@ -332,7 +338,7 @@ echo "  - 端口: ${OPENCLAW_GATEWAY_PORT:-18789}"
 echo "  - 绑定模式: lan（强制）"
 echo "  - 飞书模式: WebSocket 长连接（默认）"
 echo "  - 模型 Provider: ${ACTIVE_PROVIDER}"
-echo "  - Redis: 127.0.0.1:6379"
+echo "  - Redis: redis:6379（devpilot-network 服务名，bridge 模式）"
 echo "========================================"
 
 # 注意：OpenClaw 的 lan 是 --bind 的取值（非子命令），gateway 子命令无 --config 选项。

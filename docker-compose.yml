@@ -33,12 +33,11 @@ services:
       - TZ=${TZ}
     networks:
       - devpilot-network
-    # OpenClaw 使用 network_mode: host，需经宿主机回环访问 Redis，故在此发布 6379。
-    # 若该端口需对外暴露，请在宿主机防火墙仅放行可信来源。
-    ports:
-      # 仅监听宿主机回环：供 host 网络模式的 OpenClaw 经 127.0.0.1:6379 访问，
-      # 但不对宿主机之外暴露（避免未授权扫描/爆破）。生产环境切勿开放外网。
-      - "127.0.0.1:6379:6379"
+    # 【P0-7 bridge 模式】OpenClaw 已改为 bridge 网络，经服务名 redis:6379 访问，
+    # 不再需要把 6379 发布到宿主机。Redis 仅存在于 devpilot-network 内部，
+    # 不对外暴露（相比原 host 模式更安全）。如需从宿主机临时调试，可加：
+    #   ports: ["127.0.0.1:6379:6379"]
+    # 但生产环境请勿长期开放。
     logging: *default-logging
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
@@ -113,22 +112,31 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       # Web UI HTTP 明文访问放行开关（默认 true 兼容 VM 直连；生产套反代+TLS 后设 false）
       - DEVPILLOT_INSECURE_AUTH=${DEVPILLOT_INSECURE_AUTH:-true}
+      # 跨容器访问 litellm：bridge 网络内经服务名 devpilot-claude-litellm:4000
+      # （覆盖上方全局 LITELLM_PROXY_URL 的 127.0.0.1 取值，后者供 Claude 容器同容器回环使用）
+      - LITELLM_PROXY_URL=http://devpilot-claude-litellm:4000
+      # 宿主机可达 IP（可选）：bridge 模式下用于 OpenClaw 控制 UI 的 allowedOrigins /
+      # WebSocket 来源白名单。留空则自动探测容器内 IP（localhost/SSH 隧道场景可用，
+      # 局域网浏览器访问建议显式填写宿主机 LAN IP，如 192.168.1.100）。
+      - DEVPILOT_HOST_IP=${DEVPILOT_HOST_IP:-}
     volumes:
       - ./data/openclaw:/data/openclaw
       - ./logs/openclaw:/logs
-    # 关键：使用宿主机网络，使 OpenClaw gateway --bind lan 检测到 VM 真实网卡 IP
-    # （如 192.168.106.128）而非容器内网 172.x 地址；控制 UI 的 WebSocket 广播地址
-    # 因此变为 ws://<VM_IP>:18789，浏览器经 http(s)://<VM_IP>:18789 可同源直连。
-    # 注意：host 模式下不再需要 ports 映射（网关直接绑定宿主机端口）。
-    #
-    # 【安全评估 · 待测试后改回 bridge】host 网络是多个安全妥协的根源：
-    #   1) Redis/LiteLLM 被迫暴露宿主机（已用 127.0.0.1 绑定缓解，见各 ports）
-    #   2) init-openclaw.sh 须把 redis:6379 改写为 127.0.0.1:6379
-    #   3) macOS/Windows Docker Desktop 对 host 网络支持有限
-    # 改回 bridge 时需同步：① 恢复 ports 映射（18789:18789）② 删除 init-openclaw.sh
-    #   的 redis→127.0.0.1 改写 ③ 验证 gateway --bind lan 在 bridge 下 WebSocket 广播
-    #   地址是否正确（可能需通过环境变量显式指定广播 IP）。
-    network_mode: "host"
+    # 【P0-7】OpenClaw 由 host 网络改为 bridge 网络（devpilot-network），恢复容器隔离：
+    #   - Redis 不再发布到宿主机，OpenClaw 经服务名 redis:6379 访问（见 init-openclaw.sh）
+    #   - LiteLLM 经服务名 devpilot-claude-litellm:4000 访问（下方 LITELLM_PROXY_URL）
+    #   - 网关端口通过 Docker 端口映射暴露到宿主机（18789:18789），局域网浏览器
+    #     仍可经 http://<宿主机IP>:18789 直连；此端口建议仅在可信网络开放，
+    #     生产环境套反向代理 + TLS 并限制来源。
+    # 注意：bridge 模式下 OpenClaw 容器内网卡为 172.x，网关 --bind lan 会绑定到该
+    #   容器内网地址；浏览器经宿主机端口映射访问时，WebSocket/CORS 来源需通过
+    #   DEVPILOT_HOST_IP 显式指定宿主机可达 IP（见下方 env 与 init-openclaw.sh）。
+    networks:
+      - devpilot-network
+    ports:
+      # 暴露到宿主机所有接口，供局域网浏览器经 http://<宿主机IP>:18789 访问。
+      # 若仅本机访问，可改为 "127.0.0.1:18789:18789"。生产请配合防火墙 / 反代限制。
+      - "18789:18789"
     logging: *default-logging
     healthcheck:
       # OpenClaw 容器已安装 curl（见 Dockerfile），网关提供 /healthz 端点。
@@ -216,10 +224,11 @@ services:
       # 但容器运行时可通过此挂载访问宿主机 cicd/ 下的部署脚本。
       - ./cicd:/opt/devpilot/cicd:ro
     ports:
-      # litellm 代理端口，仅监听宿主机回环：供 host 网络模式的 OpenClaw 经
-      # 127.0.0.1:4000 访问（见 OpenClaw 的 LITELLM_PROXY_URL），以及宿主机侧
-      # 脚本（service.sh/verify.sh）健康检查。容器内的 Claude Code 经同容器
-      # 127.0.0.1:4000 访问（见 start.sh）。不对宿主机之外暴露。
+      # litellm 代理端口，仅监听宿主机回环：供宿主机侧脚本（service.sh/verify.sh/
+      # rebuild.sh/deploy.sh）做健康检查与端到端验证。容器内的 Claude Code 经同容器
+      # 127.0.0.1:4000 访问（见 start.sh）；跨容器的 OpenClaw 经服务名
+      # devpilot-claude-litellm:4000 访问（见 OpenClaw 服务的 LITELLM_PROXY_URL），
+      # 不经宿主机端口。不对宿主机之外暴露。
       - "127.0.0.1:4000:4000"
     networks:
       - devpilot-network
