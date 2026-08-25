@@ -403,6 +403,17 @@ if [ -z "${LLM_PLATFORM}" ]; then
     LLM_PLATFORM="agnes"
     warn "LLM_PLATFORM 未设置，默认 agnes"
 fi
+
+# ---- 加载 .env 到 shell ----
+# 步骤 3 此前只用 check_env_var() 自带的 grep 从 .env 文件读单值，但
+# configure_platform() 内部用 ${AGNES_API_KEY} 等读 shell env。如不
+# source，configure_platform 会看到空变量 → 报"未设置或仍为占位符"
+# 误判。docker compose --env-file .env 与下游步骤也都依赖 shell 里
+# 已有 env vars。在调 configure_platform 之前一次性 source .env。
+if [ -f "${PROJECT_ROOT}/.env" ]; then
+    load_env "${PROJECT_ROOT}/.env" || exit 1
+fi
+
 # 平台显示名 + 校验变量前缀；统一从 common.sh:configure_platform() 导出。
 configure_platform "${LLM_PLATFORM}"
 PLATFORM_NAME="${LLM_PLATFORM_NAME}"
