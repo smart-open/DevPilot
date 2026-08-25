@@ -310,13 +310,13 @@ detail "创建 data/ 目录..."
 mkdir -p data/redis data/openclaw data/devpilot-claude
 detail "  data/redis/         - Redis 持久化"
 detail "  data/openclaw/      - OpenClaw 配置"
-detail "  data/devpilot-claude/ - CC-Switch 数据"
+detail "  data/devpilot-claude/ - Claude Code 数据"
 
 detail "创建 logs/ 目录..."
 mkdir -p logs/redis logs/openclaw logs/devpilot-claude
 detail "  logs/redis/          - Redis 日志"
 detail "  logs/openclaw/       - OpenClaw 日志"
-detail "  logs/devpilot-claude/ - CC-Switch 日志"
+detail "  logs/devpilot-claude/ - Claude Code 日志"
 
 detail "创建 workspace/ 目录..."
 mkdir -p workspace
@@ -448,7 +448,7 @@ step_begin 4 "构建 Docker 镜像"
 
 detail "构建配置:"
 detail "  OpenClaw Dockerfile:    dockerfiles/openclaw/Dockerfile"
-detail "  CC-Switch Dockerfile:   dockerfiles/claude/Dockerfile"
+detail "  devpilot-claude-litellm Dockerfile:   dockerfiles/claude/Dockerfile"
 detail "  构建上下文:             ${SCRIPT_DIR}"
 detail "  .dockerignore:          已启用"
 

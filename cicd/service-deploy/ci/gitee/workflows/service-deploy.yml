@@ -4,7 +4,7 @@
 # 触发：推送包含 service.yaml 变更的代码、手动触发
 #
 # 与 cicd/ci/gitee/workflows/ci.yml 的区别：
-#   ci.yml       -> 部署 DevPilot 平台本身（Redis/OpenClaw/CC-Switch）
+#   ci.yml       -> 部署 DevPilot 平台本身（Redis/OpenClaw/devpilot-claude-litellm）
 #   本流水线      -> 部署 Claude Code 开发出的服务
 #
 # 注意：此文件需放置在仓库根目录的 .workflow/ 下才能被 Gitee Go 识别

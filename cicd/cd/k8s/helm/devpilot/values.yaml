@@ -84,20 +84,20 @@ openclaw:
       cpu: 1000m
       memory: 1Gi
 
-# ---- CC-Switch + Claude Code 配置 ----
+# ---- Claude Code + 内置 LiteLLM 配置 ----
 ccSwitchClaude:
   # 镜像地址（需替换为实际镜像仓库地址）
   image: "devpilot-claude-litellm:latest"
   ccSwitchVersion: "v0.21.0"
   claudeCodeVersion: "2.1.220"
-  # Web UI 端口
-  webPort: 8890
+  # LiteLLM 代理端口（仅容器内/回环，K8s 下经 NodePort 暴露）
+  webPort: 4000
   # 持久化：Claude Code 工作空间
   workspacePersistence:
     enabled: true
     storageClass: ""
     size: 5Gi
-  # 持久化：CC-Switch 配置
+  # 持久化：Claude Code 配置
   configPersistence:
     enabled: true
     storageClass: ""
@@ -124,7 +124,7 @@ service:
   redisType: ClusterIP
   # OpenClaw 服务类型
   openclawType: NodePort
-  # CC-Switch 服务类型
+  # devpilot-claude-litellm 服务类型
   ccSwitchType: NodePort
   # NodePort 端口（留空则自动分配）
   openclawNodePort: ""
@@ -140,7 +140,7 @@ ingress:
     # cert-manager.io/cluster-issuer: letsencrypt-prod
   # OpenClaw 域名
   openclawHost: "openclaw.your-domain.com"
-  # CC-Switch 域名
+  # devpilot-claude-litellm 域名
   # TLS 配置
   tls:
     enabled: false

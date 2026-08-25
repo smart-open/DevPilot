@@ -36,7 +36,7 @@ DevPilot 的核心理念：**AI 开发 -> 自动部署 -> 飞书通知**。Claud
                     ┌─────────────────────────────────────────────────┐
                     │              DevPilot 平台容器                   │
                     │  ┌───────────┐  ┌────────────────────────────┐ │
-  飞书消息 ────────>│  │ OpenClaw   │  │  CC-Switch + Claude Code    │ │
+  飞书消息 ────────>│  │ OpenClaw   │  │  Claude Code + 内置 LiteLLM    │ │
   /deploy xxx       │  │ (Bot)      │  │  workspace/ 下开发服务      │ │
                     │  └─────┬─────┘  └──────────┬─────────────────┘ │
                     └────────┼───────────────────┼───────────────────┘
@@ -330,7 +330,7 @@ healthcheck:
 
 **集成方式**：
 
-在 CC-Switch 容器的 `start.sh` 中添加（通过环境变量控制）：
+在 devpilot-claude-litellm 容器的 `start.sh` 中添加（通过环境变量控制）：
 
 ```bash
 # 在 start.sh 末尾添加
@@ -610,7 +610,7 @@ echo "include: 'cicd/service-deploy/ci/gitlab/.gitlab-ci-service-deploy.yml'" >>
 
 ## Claude Code 供应商自动配置
 
-CC-Switch 容器启动时会**自动配置 agnes-ai 供应商**，无需手动在 Web UI 中添加。
+devpilot-claude-litellm 容器启动时会**自动配置 agnes-ai 供应商**，无需手动在 Web UI 中添加。
 
 **自动配置逻辑**（位于 `conf/claude/start.sh`）：
 
@@ -689,7 +689,7 @@ bash cicd/service-deploy/deploy-service.sh --service-dir workspace/my-api
 DEVPILOT_AUTO_DEPLOY=true
 ```
 
-然后在 CC-Switch 容器的 `start.sh` 末尾添加：
+然后在 devpilot-claude-litellm 容器的 `start.sh` 末尾添加：
 
 ```bash
 if [ "$DEVPILOT_AUTO_DEPLOY" = "true" ]; then
@@ -748,7 +748,7 @@ bash cicd/service-deploy/deploy-service.sh --service-dir workspace/my-api --dry-
 
 `build.type` 是可选字段。未指定时，`deploy-service.sh` 会根据服务目录中的文件自动推断：存在 `Dockerfile` 则用 `dockerfile`，存在 `package.json` 则用 `nodejs`，存在 `requirements.txt` 则用 `python`，否则用 `static`。因此极简模式的 `service.yaml` 只需 `name` 和 `deploy.target` 两项。
 
-### Q: CC-Switch 需要手动配置 agnes-ai 供应商吗
+### Q: devpilot-claude-litellm 需要手动配置 agnes-ai 供应商吗
 
 不需要。devpilot-claude-litellm 容器启动时 `start.sh` 会根据 `.env` 中的 `LLM_PLATFORM` 与对应平台凭据，将供应商配置写入 `/home/node/.claude/settings.json`。仅在配置文件已存在（用户曾自定义）时才跳过自动配置。
 

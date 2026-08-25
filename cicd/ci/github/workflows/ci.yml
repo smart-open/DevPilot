@@ -156,10 +156,10 @@ jobs:
           cache-from: type=gha,scope=openclaw
 
   # ============================================================
-  # 任务 3：构建并推送 Docker 镜像（CC-Switch + Claude Code）
+  # 任务 3：构建并推送 Docker 镜像（Claude Code + 内置 LiteLLM）
   # ============================================================
   build-devpilot-claude-litellm:
-    name: 构建镜像 (CC-Switch+Claude)
+    name: 构建镜像 (devpilot-claude-litellm)
     needs: lint
     runs-on: ubuntu-latest
     permissions:
@@ -191,7 +191,7 @@ jobs:
       - name: 设置 Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: 构建并推送 CC-Switch+Claude 镜像
+      - name: 构建并推送 devpilot-claude-litellm 镜像
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -251,7 +251,7 @@ jobs:
             OPENCLAW_VERSION=${{ env.OPENCLAW_VERSION }}
             NODE_IMAGE_TAG=${{ env.NODE_IMAGE_TAG }}
 
-      - name: 构建 CC-Switch+Claude 镜像（用于扫描）
+      - name: 构建 devpilot-claude-litellm 镜像（用于扫描）
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -272,7 +272,7 @@ jobs:
           exit-code: "0"
           severity: CRITICAL,HIGH
 
-      - name: Trivy 扫描 CC-Switch+Claude 镜像
+      - name: Trivy 扫描 devpilot-claude-litellm 镜像
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: devpilot-claude-litellm:ci-scan
@@ -287,7 +287,7 @@ jobs:
         with:
           sarif_file: trivy-openclaw-results.sarif
 
-      - name: 上传 CC-Switch 扫描结果到 GitHub Security
+      - name: 上传 devpilot-claude-litellm 扫描结果到 GitHub Security
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:

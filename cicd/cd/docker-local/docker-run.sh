@@ -170,12 +170,12 @@ success "OpenClaw 容器已启动 (端口 ${OPENCLAW_GATEWAY_PORT} -> 18789)"
 wait_for_container_http "devpilot-openclaw" "18789" "/healthz" 40 3 || true
 
 # ============================================================
-# 9. 启动 CC-Switch + Claude Code 容器
+# 9. 启动 Claude Code + 内置 LiteLLM 容器
 # ============================================================
 echo -e "${CYAN}========================================${NC}"
-echo -e "${CYAN}  启动容器 3/3：CC-Switch + Claude Code${NC}"
+echo -e "${CYAN}  启动容器 3/3：Claude Code + 内置 LiteLLM${NC}"
 echo -e "${CYAN}========================================${NC}"
-info "启动 CC-Switch+Claude 容器 ..."
+info "启动 devpilot-claude-litellm 容器 ..."
 
 # 根据 LLM_PLATFORM 解析当前平台配置（与 start.sh / llm-init.sh 保持一致）
 case "${LLM_PLATFORM:-agnes}" in

@@ -1,13 +1,13 @@
 # ============================================================
 # DevPilot Helm Chart
 # AI 开发环境一键部署 Helm Chart
-# 包含：Redis + OpenClaw + CC-Switch/Claude Code
+# 包含：Redis + OpenClaw + devpilot-claude-litellm/Claude Code
 # ============================================================
 apiVersion: v2
 name: devpilot
 description: |
   AI 开发环境一键部署 Helm Chart
-  包含 Redis 缓存、OpenClaw 飞书 AI 机器人、CC-Switch + Claude Code 编程助手
+  包含 Redis 缓存、OpenClaw 飞书 AI 机器人、Claude Code + 内置 LiteLLM 编程助手
 type: application
 version: 1.0.0
 appVersion: "2026.7.1"

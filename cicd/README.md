@@ -211,7 +211,7 @@ bash cicd/ci/scripts/lint.sh
 |------|--------|------|
 | Lint | `lint` | Shell 脚本语法检查、Dockerfile 存在性检查、docker-compose.yml 语法校验、`.env.example` 变量完整性检查 |
 | Build | `build-openclaw` | 构建 OpenClaw 镜像，推送至 `ghcr.io`，缓存 Docker 层 |
-| Build | `build-devpilot-claude-litellm` | 构建 CC-Switch+Claude 镜像，推送至 `ghcr.io`，缓存 Docker 层 |
+| Build | `build-devpilot-claude-litellm` | 构建 devpilot-claude-litellm 镜像，推送至 `ghcr.io`，缓存 Docker 层 |
 | Scan | `security-scan` | Trivy 安全扫描两个镜像 + 文件系统扫描，结果上传至 GitHub Security |
 
 **镜像仓库**：GitHub Container Registry（`ghcr.io`）
@@ -259,7 +259,7 @@ cp cicd/ci/github/workflows/ci.yml .github/workflows/ci.yml
 | 阶段 | 阶段名 | 说明 |
 |------|--------|------|
 | 1 | `lint-stage` | Shell 语法检查、Dockerfile 检查、compose 语法校验、env 模板检查 |
-| 2 | `build-stage` | 构建 OpenClaw 和 CC-Switch+Claude 两个镜像 |
+| 2 | `build-stage` | 构建 OpenClaw 和 devpilot-claude-litellm 两个镜像 |
 | 3 | `push-stage` | 登录镜像仓库并推送镜像（需配置仓库变量） |
 | 4 | `scan-stage` | Trivy 安全扫描镜像和文件系统 |
 
@@ -309,11 +309,11 @@ cp cicd/ci/gitee/workflows/ci.yml .workflow/devpilot-ci.yml
 | `lint` | `lint:compose` | docker-compose.yml 语法校验 |
 | `lint` | `lint:env-template` | .env.example 变量完整性检查 |
 | `build` | `build:openclaw` | 构建 OpenClaw 镜像（Docker-in-Docker） |
-| `build` | `build:devpilot-claude-litellm` | 构建 CC-Switch+Claude 镜像 |
+| `build` | `build:devpilot-claude-litellm` | 构建 devpilot-claude-litellm 镜像 |
 | `push` | `push:openclaw` | 推送至 GitLab 镜像仓库 |
 | `push` | `push:devpilot-claude-litellm` | 推送至 GitLab 镜像仓库 |
 | `scan` | `scan:openclaw` | Trivy 安全扫描 OpenClaw |
-| `scan` | `scan:devpilot-claude-litellm` | Trivy 安全扫描 CC-Switch+Claude |
+| `scan` | `scan:devpilot-claude-litellm` | Trivy 安全扫描 devpilot-claude-litellm |
 | `scan` | `scan:filesystem` | 文件系统安全扫描 |
 
 **技术要点**：
@@ -376,7 +376,7 @@ GitLab Runner 需配置 Docker 执行器并启用 Docker-in-Docker 服务。
 3. 检查 Docker Engine 和 Compose 版本
 4. 创建 `data/`、`logs/`、`workspace/` 目录（幂等）
 5. 执行 `docker compose up -d --build` 构建并启动
-6. 等待 Redis / OpenClaw / CC-Switch 三个服务健康就绪
+6. 等待 Redis / OpenClaw / devpilot-claude-litellm 三个服务健康就绪
 7. 输出容器状态和访问地址
 
 **使用方式**：
@@ -409,9 +409,9 @@ bash cicd/scripts/deploy.sh --mode compose
 2. 检查 Docker 环境
 3. 创建目录（幂等）
 4. 创建 Docker 桥接网络 `devpilot-network`（幂等）
-5. 构建两个自建镜像（OpenClaw + CC-Switch+Claude）
+5. 构建两个自建镜像（OpenClaw + devpilot-claude-litellm）
 6. 清理同名旧容器（幂等，存在则删除）
-7. 按 Redis -> OpenClaw -> CC-Switch 顺序启动容器
+7. 按 Redis -> OpenClaw -> devpilot-claude-litellm 顺序启动容器
 8. 每个容器启动后等待健康就绪
 9. 输出容器状态和常用命令
 
@@ -511,7 +511,7 @@ ssh-copy-id root@192.168.1.100
 
 # 4. 开放防火墙端口
 # TCP 模式: 2375
-# 服务端口: 18789, 8890
+# 服务端口: 18789（OpenClaw Gateway）、4000（LiteLLM 代理，仅回环）
 ```
 
 ---
@@ -538,7 +538,7 @@ K8s 部署统一采用 **Helm Chart 唯一方式**，不再提供 kubectl 原生
 | `_helpers.tpl` | 模板辅助函数（名称、标签生成） |
 | `configmap.yaml` | ConfigMap 模板（非敏感配置） |
 | `secret.yaml` | Secret 模板（敏感数据） |
-| `deployment.yaml` | 3 个 Deployment 模板（Redis + OpenClaw + CC-Switch） |
+| `deployment.yaml` | 3 个 Deployment 模板（Redis + OpenClaw + devpilot-claude-litellm） |
 | `service.yaml` | 3 个 Service 模板 |
 | `ingress.yaml` | Ingress 模板（可选） |
 
@@ -556,8 +556,8 @@ K8s 部署统一采用 **Helm Chart 唯一方式**，不再提供 kubectl 原生
 | `redis.persistence.size` | Redis 存储大小 | `1Gi` |
 | `openclaw.image` | OpenClaw 镜像 | `devpilot-openclaw:latest` |
 | `openclaw.gatewayPort` | Gateway 端口 | `18789` |
-| `ccSwitchClaude.image` | CC-Switch 镜像 | `devpilot-claude-litellm:latest` |
-| `ccSwitchClaude.webPort` | Web UI 端口 | `8890` |
+| `ccSwitchClaude.image` | devpilot-claude-litellm 镜像 | `devpilot-claude-litellm:latest` |
+| `ccSwitchClaude.webPort` | LiteLLM 代理端口（回环） | `4000` |
 | `ingress.enabled` | 是否启用 Ingress | `false` |
 
 **使用方式**：
@@ -682,7 +682,7 @@ DevPilot 不仅部署平台本身，还支持自动部署 Claude Code 开发出�
 
 | 对比项 | 平台 CD（cicd/cd/） | 服务自动部署（cicd/service-deploy/） |
 |--------|--------------------|---------------------------------------|
-| 部署对象 | DevPilot 平台（Redis/OpenClaw/CC-Switch） | Claude Code 开发的服务 |
+| 部署对象 | DevPilot 平台（Redis/OpenClaw/devpilot-claude-litellm） | Claude Code 开发的服务 |
 | 服务来源 | 项目内置的 docker-compose.yml / Helm Chart | workspace/ 下每个服务的 service.yaml |
 | 触发方式 | 手动 / CI 流水线 | 开发完成钩子 / 飞书命令 / Git 推送 / 手动 |
 | 部署目标 | 固定的 3 个容器 | 动态的多个服务 |

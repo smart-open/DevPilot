@@ -19,7 +19,7 @@ data:
   OPENCLAW_GATEWAY_PORT: {{ .Values.openclaw.gatewayPort | quote }}
   OPENCLAW_VERSION: {{ .Values.openclaw.version | quote }}
 
-  # ---- CC-Switch + Claude Code 配置 ----
+  # ---- Claude Code + 内置 LiteLLM 配置 ----
   CLAUDE_CODE_VERSION: {{ .Values.ccSwitchClaude.claudeCodeVersion | quote }}
   DEVPILOT_AUTO_DEPLOY: {{ .Values.ccSwitchClaude.autoDeploy | quote }}
 

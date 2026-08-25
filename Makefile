@@ -45,7 +45,7 @@ up-bot: ## 仅启动飞书机器人（Redis + OpenClaw）
 	@printf "$(GREEN)飞书机器人已启动$(RESET)\n"
 
 .PHONY: up-dev
-up-dev: ## 仅启动开发环境（CC-Switch + Claude Code）
+up-dev: ## 仅启动开发环境（Claude Code + 内置 LiteLLM）
 	$(COMPOSE) --profile dev up -d --build
 	@printf "$(GREEN)开发环境已启动$(RESET)\n"
 

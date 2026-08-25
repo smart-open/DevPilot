@@ -12,7 +12,7 @@ set -e
 #   ./post-dev-hook.sh --all              # 部署所有含 service.yaml 的服务
 #
 # 集成方式:
-#   在 CC-Switch 容器的 start.sh 中添加（通过环境变量控制）：
+#   在 devpilot-claude-litellm 容器的 start.sh 中添加（通过环境变量控制）：
 #   if [ "$DEVPILOT_AUTO_DEPLOY" = "true" ]; then
 #       bash /workspace/cicd/service-deploy/post-dev-hook.sh
 #   fi

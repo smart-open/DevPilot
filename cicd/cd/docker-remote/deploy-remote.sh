@@ -253,14 +253,14 @@ else
         .
     success "OpenClaw 镜像远程构建完成"
 
-    info "在远程构建 CC-Switch+Claude 镜像 ..."
+    info "在远程构建 devpilot-claude-litellm 镜像 ..."
     docker build \
         --build-arg "CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION}" \
         --build-arg "NODE_IMAGE_TAG=${NODE_IMAGE_TAG}" \
         -t devpilot-claude-litellm:latest \
         -f dockerfiles/claude/Dockerfile \
         .
-    success "CC-Switch+Claude 镜像远程构建完成"
+    success "devpilot-claude-litellm 镜像远程构建完成"
 
     # 清理旧容器（幂等）
     info "清理远程旧容器 ..."
@@ -300,8 +300,8 @@ else
         devpilot-openclaw:latest
     success "远程 OpenClaw 容器已启动"
 
-    # 启动 CC-Switch + Claude Code
-    info "远程启动 CC-Switch+Claude 容器 ..."
+    # 启动 Claude Code + 内置 LiteLLM
+    info "远程启动 devpilot-claude-litellm 容器 ..."
     AGNES_MODEL_VALUE="${AGNES_MODEL_FLASH:-agnes-2.5-flash}"
     docker run -d \
         --name devpilot-claude-litellm \
@@ -319,7 +319,7 @@ else
         -e "DEVPILOT_AUTO_DEPLOY=${DEVPILOT_AUTO_DEPLOY:-false}" \
         -i -t \
         devpilot-claude-litellm:latest
-    success "远程 CC-Switch+Claude 容器已启动"
+    success "远程 devpilot-claude-litellm 容器已启动"
 fi
 
 # ============================================================

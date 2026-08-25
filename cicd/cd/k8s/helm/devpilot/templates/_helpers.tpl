@@ -50,7 +50,7 @@ OpenClaw 全限定名称
 {{- end -}}
 
 {{/*
-CC-Switch + Claude Code 全限定名称
+Claude Code + 内置 LiteLLM 全限定名称
 */}}
 {{- define "devpilot.ccSwitchClaude.fullname" -}}
 {{- printf "%s-devpilot-claude-litellm" (include "devpilot.name" .) -}}
@@ -85,7 +85,7 @@ app.kubernetes.io/component: bot
 {{- end -}}
 
 {{/*
-CC-Switch 选择器标签
+devpilot-claude-litellm 选择器标签
 */}}
 {{- define "devpilot.ccSwitchClaude.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "devpilot.ccSwitchClaude.fullname" . }}

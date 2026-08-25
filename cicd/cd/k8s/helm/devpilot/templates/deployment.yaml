@@ -313,7 +313,7 @@ spec:
 
 ---
 # ============================================================
-# CC-Switch + Claude Code Deployment + PVC
+# Claude Code + 内置 LiteLLM Deployment + PVC
 # ============================================================
 {{- if .Values.ccSwitchClaude.workspacePersistence.enabled -}}
 apiVersion: v1

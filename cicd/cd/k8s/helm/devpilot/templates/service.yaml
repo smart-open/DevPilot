@@ -46,7 +46,7 @@ spec:
       protocol: TCP
 
 ---
-# ---- CC-Switch + Claude Code Service ----
+# ---- Claude Code + 内置 LiteLLM Service ----
 apiVersion: v1
 kind: Service
 metadata:

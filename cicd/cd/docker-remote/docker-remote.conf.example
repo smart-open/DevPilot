@@ -64,4 +64,4 @@ LOCAL_FORWARD_PORT=23750
 #    编辑 /etc/docker/daemon.json：
 #    { "hosts": ["fd://", "tcp://127.0.0.1:2375"] }
 #
-# 5. 防火墙：开放对应端口（2375 TCP 模式 / OpenClaw 端口 / CC-Switch 端口）
+# 5. 防火墙：开放对应端口（2375 TCP 模式 / OpenClaw 端口 / devpilot-claude-litellm 端口 4000 回环）
