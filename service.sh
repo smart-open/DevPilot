@@ -497,7 +497,7 @@ do_start() {
         summary_block="${summary_block}  OpenClaw:  http://localhost:${GATEWAY_PORT}\n"
     fi
     if [ "${profile_name}" = "full" ] || [ "${profile_name}" = "dev" ]; then
-        summary_block="${summary_block}  Claude Code: docker compose exec devpilot-claude-litellm claude\n"
+        summary_block="${summary_block}  Claude Code: docker compose exec claude-litellm claude\n"
         summary_block="${summary_block}  litellm 代理: http://127.0.0.1:4000（合并于 devpilot-claude-litellm）\n"
     fi
     summary_block="${summary_block}  模型平台：${LLM_PLATFORM_NAME} (${LLM_MODEL})"
@@ -519,7 +519,7 @@ do_start() {
             echo "  OpenClaw: http://localhost:${GATEWAY_PORT}"
         fi
         if [ "${profile_name}" = "full" ] || [ "${profile_name}" = "dev" ]; then
-            echo "  Claude Code: docker compose exec devpilot-claude-litellm claude"
+            echo "  Claude Code: docker compose exec claude-litellm claude"
             echo "  litellm 代理: http://127.0.0.1:4000（合并于 devpilot-claude-litellm）"
         fi
         echo "模型切换状态: 成功"

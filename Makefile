@@ -63,7 +63,7 @@ restart-openclaw: ## 仅重启 OpenClaw
 
 .PHONY: restart-claude
 restart-claude: ## 仅重启 Claude Code
-	$(COMPOSE) restart devpilot-claude-litellm
+	$(COMPOSE) restart claude-litellm
 
 .PHONY: restart-redis
 restart-redis: ## 仅重启 Redis
@@ -81,7 +81,7 @@ logs-openclaw: ## 查看 OpenClaw 日志
 
 .PHONY: logs-claude
 logs-claude: ## 查看 Claude Code 日志
-	$(COMPOSE) logs -f devpilot-claude-litellm
+	$(COMPOSE) logs -f claude-litellm
 
 .PHONY: logs-redis
 logs-redis: ## 查看 Redis 日志
@@ -103,17 +103,17 @@ health: ## 健康检查所有服务
 	@printf "litellm:   "
 	@curl -sf http://localhost:4000/health/liveliness >/dev/null 2>&1 && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
 	@printf "Claude:    "
-	@$(COMPOSE) exec -T devpilot-claude-litellm claude --version 2>/dev/null && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
+	@$(COMPOSE) exec -T claude-litellm claude --version 2>/dev/null && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
 
 ##@ 容器交互
 
 .PHONY: shell
 shell: ## 进入 Claude 容器 bash（以 node 用户，对齐最小权限）
-	$(COMPOSE) exec --user node devpilot-claude-litellm bash
+	$(COMPOSE) exec --user node claude-litellm bash
 
 .PHONY: claude
 claude: ## 启动 Claude Code 交互式会话（以 node 用户）
-	$(COMPOSE) exec --user node devpilot-claude-litellm claude
+	$(COMPOSE) exec --user node claude-litellm claude
 
 .PHONY: redis-cli
 redis-cli: ## 进入 Redis CLI

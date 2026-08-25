@@ -119,7 +119,7 @@ fi
 
 # ---- 7. 无缓存重建 ----
 echo -e "${GREEN}[7/8]${NC} 无缓存重建镜像（devpilot-claude-litellm / openclaw）..."
-docker compose build --no-cache devpilot-claude-litellm openclaw 2>&1 | tail -15
+docker compose build --no-cache claude-litellm openclaw 2>&1 | tail -15
 
 # ---- 8. 启动 + 验证 ----
 echo -e "${GREEN}[8/8]${NC} 启动服务..."
@@ -146,11 +146,11 @@ docker exec devpilot-claude-litellm cat /opt/litellm/litellm_config.yaml 2>/dev/
 
 echo ""
 echo -e "${GREEN}▶ Claude Code 配置：${NC}"
-docker compose exec -T devpilot-claude-litellm sh -c 'cat /home/node/.claude/settings.json 2>/dev/null' 2>/dev/null | sed 's/^/  /' || echo "  (无法读取)"
+docker compose exec -T claude-litellm sh -c 'cat /home/node/.claude/settings.json 2>/dev/null' 2>/dev/null | sed 's/^/  /' || echo "  (无法读取)"
 
 echo ""
 echo -e "${GREEN}▶ Claude Code 版本：${NC}"
-docker compose exec -T devpilot-claude-litellm claude --version 2>/dev/null | sed 's/^/  /' || echo "  (无法读取)"
+docker compose exec -T claude-litellm claude --version 2>/dev/null | sed 's/^/  /' || echo "  (无法读取)"
 
 echo ""
 echo -e "${CYAN}========================================${NC}"
@@ -158,8 +158,8 @@ echo -e "${GREEN}  重建完成！${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
 echo -e "  常用命令："
-echo -e "    ${YELLOW}docker compose exec devpilot-claude-litellm claude \"你是谁\"${NC}    # 端到端测试"
-echo -e "    ${YELLOW}docker compose logs -f devpilot-claude-litellm${NC}  # 实时日志"
+echo -e "    ${YELLOW}docker compose exec claude-litellm claude \"你是谁\"${NC}    # 端到端测试"
+echo -e "    ${YELLOW}docker compose logs -f claude-litellm${NC}  # 实时日志"
 echo -e "    ${YELLOW}make health${NC}                                              # 健康检查"
-echo -e "    ${YELLOW}docker compose restart devpilot-claude-litellm${NC}                  # 仅重启 Claude 容器"
-echo -e "    ${YELLOW}docker compose restart devpilot-claude-litellm${NC}                 # 仅重启 litellm 代理"
+echo -e "    ${YELLOW}docker compose restart claude-litellm${NC}                  # 仅重启 Claude 容器"
+echo -e "    ${YELLOW}docker compose restart claude-litellm${NC}                 # 仅重启 litellm 代理"

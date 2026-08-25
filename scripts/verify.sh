@@ -117,7 +117,7 @@ echo ""
 
 # ============= 阶段 3: Claude Code settings.json =============
 echo -e "${CYAN}[4/7] Claude Code 链路${NC}"
-SETTINGS=$(docker compose exec -T devpilot-claude-litellm cat /home/node/.claude/settings.json 2>/dev/null)
+SETTINGS=$(docker compose exec -T claude-litellm cat /home/node/.claude/settings.json 2>/dev/null)
 if echo "$SETTINGS" | grep -q '"ANTHROPIC_BASE_URL": "http://127.0.0.1:4000"'; then
     check_pass "ANTHROPIC_BASE_URL 指向 devpilot-claude-litellm:4000"
 else
@@ -136,7 +136,7 @@ else
 fi
 
 # claude --version
-CLAUDE_VER=$(docker compose exec -T devpilot-claude-litellm claude --version 2>&1 | head -1)
+CLAUDE_VER=$(docker compose exec -T claude-litellm claude --version 2>&1 | head -1)
 if echo "$CLAUDE_VER" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
     check_pass "claude CLI 可用（$CLAUDE_VER）"
 else
@@ -215,7 +215,7 @@ else
     echo "排障提示："
     echo "  1. 容器日志：docker compose logs -f <service>"
     echo "  2. litellm 配置：docker exec devpilot-claude-litellm cat /opt/litellm/litellm_config.yaml"
-    echo "  3. Claude Code 配置：docker compose exec devpilot-claude-litellm cat /home/node/.claude/settings.json"
+    echo "  3. Claude Code 配置：docker compose exec claude-litellm cat /home/node/.claude/settings.json"
     echo "  4. 详细排障手册：运维操作手册.md §13"
     exit 1
 fi
