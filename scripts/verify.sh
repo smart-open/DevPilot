@@ -78,14 +78,19 @@ else
     check_fail "litellm /health/liveliness -> HTTP $HEALTH"
 fi
 
-MODEL_COUNT=$(docker exec devpilot-claude-litellm cat /opt/litellm/litellm_config.yaml 2>/dev/null | grep -c "^  - model_name:" || echo 0)
-if [ "$MODEL_COUNT" -ge 1 ]; then
-    check_pass "litellm 注册了 $MODEL_COUNT 个模型"
+MODEL_COUNT=$(docker exec devpilot-claude-litellm cat /opt/litellm/litellm_config.yaml 2>/dev/null \
+    | awk '/^  - model_name:/{c++} END{print c+0}')
+MODEL_COUNT="${MODEL_COUNT:-0}"
+if [ "$MODEL_COUNT" -ge 1 ] 2>/dev/null; then
+    check_pass "litellm 注册了 ${MODEL_COUNT} 个模型"
 else
     check_fail "litellm 未注册任何模型（检查 .env 中 5 平台 API Key 是否配置）"
 fi
 
-# Anthropic 协议打 litellm（验证 /v1/messages 路由 + master_key 校验 + 上游转发）
+# OpenAI 协议打 litellm（项目实链路：Claude Code 经 127.0.0.1:4000 走 /v1/chat/completions，
+# litellm 翻译为各平台 OpenAI Chat Completions 转发。原 /v1/messages (anthropic)
+# 路由对 agnes 这种非 claude-* 模型名识别存在 quirk，会误报 WARN；此处直接探
+# 真实链路）。
 MASTER_KEY=$(docker exec devpilot-claude-litellm env 2>/dev/null | grep -oE 'LITELLM_MASTER_KEY=[^ ]+' | head -1 | cut -d= -f2)
 if [ -z "$MASTER_KEY" ]; then
     check_warn "未从 litellm 容器读取到 LITELLM_MASTER_KEY（配置异常或容器未启动）"
@@ -95,18 +100,18 @@ ACTIVE_MODEL=$(docker exec devpilot-claude-litellm cat /opt/litellm/litellm_conf
 if [ -z "$ACTIVE_MODEL" ]; then
     ACTIVE_MODEL="agnes/agnes-2.5-flash"
 fi
-RESP=$(curl -s -X POST http://localhost:4000/v1/messages \
-    -H "x-api-key: ${MASTER_KEY}" \
-    -H "Content-Type: application/json" -H "anthropic-version: 2023-06-01" \
+RESP=$(curl -s -X POST http://localhost:4000/v1/chat/completions \
+    -H "Authorization: Bearer ${MASTER_KEY}" \
+    -H "Content-Type: application/json" \
     -d "{\"model\":\"${ACTIVE_MODEL}\",\"max_tokens\":8,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}" 2>&1)
 if echo "$RESP" | grep -q '"content"'; then
-    check_pass "Anthropic 协议探测成功（$ACTIVE_MODEL）"
-elif echo "$RESP" | grep -q "Authentication"; then
+    check_pass "OpenAI 协议探测成功（$ACTIVE_MODEL）"
+elif echo "$RESP" | grep -qE '401|Authentication'; then
     check_fail "litellm 鉴权失败（master_key 不一致？）"
-elif echo "$RESP" | grep -q "Invalid model"; then
+elif echo "$RESP" | grep -qE 'Invalid model|not found|healthy'; then
     check_fail "litellm 模型未注册（$ACTIVE_MODEL）"
 else
-    check_warn "Anthropic 探测返回异常：$(echo "$RESP" | head -c 200)"
+    check_warn "OpenAI 探测返回异常：$(echo "$RESP" | head -c 200)"
 fi
 echo ""
 
@@ -141,25 +146,36 @@ echo ""
 
 # ============= 阶段 4: OpenClaw + 飞书 =============
 echo -e "${CYAN}[5/7] OpenClaw + 飞书${NC}"
-GATEWAY_STATUS=$(docker compose exec -T openclaw openclaw gateway status 2>&1 | head -3)
-if echo "$GATEWAY_STATUS" | grep -qiE "running|ready|listening"; then
-    check_pass "OpenClaw gateway 运行中"
+# OpenClaw gateway 真实探活：容器内直打 /healthz。
+# 原 `openclaw gateway status` 在 2026.7.x 是 systemd 风格的状态输出（OpenClaw
+# 在容器内是前台进程，无 systemd 集成），永远走 else 分支误报 FAIL。
+GATEWAY_HEALTH=$(docker exec devpilot-openclaw \
+    curl -fsS -o /dev/null -w "%{http_code}" http://127.0.0.1:18789/healthz 2>/dev/null || echo "000")
+if [ "$GATEWAY_HEALTH" = "200" ]; then
+    check_pass "OpenClaw gateway /healthz -> 200"
 else
-    check_fail "OpenClaw gateway 异常：$(echo "$GATEWAY_STATUS" | head -2 | tr '\n' ' ')"
+    check_fail "OpenClaw gateway 不健康（/healthz HTTP $GATEWAY_HEALTH）"
 fi
 
-FEISHU_PLUGIN=$(docker compose exec -T openclaw openclaw plugins list 2>&1 | grep -i feishu)
+FEISHU_PLUGIN=$(docker exec devpilot-openclaw openclaw plugins list 2>/dev/null | grep -i feishu)
 if [ -n "$FEISHU_PLUGIN" ]; then
     check_pass "飞书插件：$FEISHU_PLUGIN"
 else
     check_warn "飞书插件未安装（重部署后可能需 openclaw plugins install feishu）"
 fi
 
-FEISHU_CHANNELS=$(docker compose exec -T openclaw openclaw channels list 2>&1 | grep -E "feishu:.*active|feishu:.*running")
-if [ -n "$FEISHU_CHANNELS" ]; then
-    check_pass "飞书频道活跃"
+# 飞书频道活跃度：双判定（飞书子进程在跑 + OpenClaw 网关 /v1/channels API 200）。
+# 原 `openclaw channels list | grep active` 在 2026.7.x 输出不含 active/running 字段。
+FEISHU_PROC=$(docker exec devpilot-openclaw sh -c "ps -ef 2>/dev/null | grep -iE 'feishu|lark' | grep -v grep | wc -l" 2>/dev/null || echo 0)
+FEISHU_API=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:18789/v1/channels 2>/dev/null || echo "000")
+FEISHU_PROC=${FEISHU_PROC//[!0-9]/}
+FEISHU_PROC="${FEISHU_PROC:-0}"
+if [ "$FEISHU_PROC" -ge 1 ] 2>/dev/null && [ "$FEISHU_API" = "200" ]; then
+    check_pass "飞书频道活跃（子进程 + 网关 API HTTP $FEISHU_API）"
+elif [ "$FEISHU_PROC" -ge 1 ] 2>/dev/null; then
+    check_warn "飞书子进程在跑但网关 /v1/channels API 异常（HTTP $FEISHU_API）"
 else
-    check_warn "飞书频道未活跃（可能需 openclaw channels start feishu）"
+    check_warn "飞书频道未活跃（feishu 子进程数=$FEISHU_PROC，需检查 OPENCLAW 配置 / FEISHU_APP_ID/SECRET）"
 fi
 echo ""
 
