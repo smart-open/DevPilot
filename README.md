@@ -41,7 +41,7 @@ git clone <repo-url> devpilot && cd devpilot
 ### 部署完成后访问
 
 - **飞书机器人**：在飞书客户端搜索并添加机器人，发送消息即可获得 AI 回复
-- **Claude Code**：运行 `docker compose exec devpilot-claude-litellm claude` 或 `make claude`
+- **Claude Code**：运行 `docker compose exec claude-litellm claude` 或 `make claude`
 - **OpenClaw Gateway**：`http://localhost:18789/healthz`
 
 ### 一键启停（推荐使用）

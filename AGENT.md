@@ -156,7 +156,7 @@ docker exec devpilot-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" ping'
 | 浏览器 Control UI 拒绝连接 | `grep -E 'allowInsecureAuth\|allowedOrigins' data/openclaw/.openclaw/openclaw.json`；`.env` 设 `DEVPILOT_HOST_IP=<LAN_IP>` |
 | verify.sh 报告 litellm 未注册模型（实际有调用） | 看 `docker exec devpilot-claude-litellm cat /opt/litellm/litellm_config.yaml` 确认 |
 | verify.sh 报告 OpenClaw gateway 异常 | 用 `docker exec devpilot-openclaw curl http://127.0.0.1:18789/healthz` 看真实 HTTP 码 |
-| Claude Code 调用 4xx | 看 `docker compose logs -f devpilot-claude-litellm`；以及 `/home/node/.claude/settings.json` 是否仍指向 `127.0.0.1:4000` |
+| Claude Code 调用 4xx | 看 `docker compose logs -f claude-litellm`；以及 `/home/node/.claude/settings.json` 是否仍指向 `127.0.0.1:4000` |
 | Claude Code 报 "no such model" | `/opt/litellm/litellm_config.yaml` 的 `model_name` 与 `ANTHROPIC_MODEL` 要一致 |
 | OpenClaw 启动循环 / 立刻退出 | `docker exec devpilot-openclaw cat /tmp/oc_validate.log` / `oc_doctor.log`（init-openclaw.sh 自动写入） |
 | `TOKEN required` | `OPENCLAW_GATEWAY_TOKEN` 不要用占位符；让 init-openclaw.sh §2.1 自动生成 |
