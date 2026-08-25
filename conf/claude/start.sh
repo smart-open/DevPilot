@@ -8,12 +8,21 @@ set -e
 # 根据 LLM_PLATFORM 动态配置大模型供应商，支持 agnes/deepseek/glm/ark/bailian。
 # ============================================================
 
+# 统一 LLM_PLATFORM 解析收敛到 cicd/lib/common.sh:configure_platform()。
+# Dockerfiles/claude/Dockerfile 已 COPY 此文件到镜像内
+# /usr/local/lib/devpilot-common.sh，本地开发时回退到相对路径。
+if [ -f /usr/local/lib/devpilot-common.sh ]; then
+    source /usr/local/lib/devpilot-common.sh
+elif [ -f "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../cicd/lib/common.sh" ]; then
+    source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../cicd/lib/common.sh"
+fi
+
 echo "========================================"
 echo "  Claude Code + LiteLLM 合体容器"
 echo "========================================"
 
 # ============================================================
-# 1. 根据 LLM_PLATFORM 解析当前平台配置
+# 1. 根据 LLM_PLATFORM 解析当前平台配置（统一走 common.sh:configure_platform）
 # ============================================================
 LLM_PLATFORM="${LLM_PLATFORM:-agnes}"
 ACTIVE_PROVIDER=""
@@ -21,45 +30,16 @@ ACTIVE_BASE_URL=""
 ACTIVE_API_KEY=""
 ACTIVE_MODEL=""
 
-case "${LLM_PLATFORM}" in
-    agnes)
-        ACTIVE_PROVIDER="agnes-ai"
-        ACTIVE_BASE_URL="${AGNES_BASE_URL:-https://api.agnes-ai.cn/v1}"
-        ACTIVE_API_KEY="${AGNES_API_KEY}"
-        ACTIVE_MODEL="${AGNES_MODEL:-agnes-2.5-flash}"
-        ;;
-    deepseek)
-        ACTIVE_PROVIDER="deepseek"
-        ACTIVE_BASE_URL="${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}"
-        ACTIVE_API_KEY="${DEEPSEEK_API_KEY}"
-        ACTIVE_MODEL="${DEEPSEEK_MODEL:-DeepSeek-V4-Flash}"
-        ;;
-    glm)
-        ACTIVE_PROVIDER="glm"
-        ACTIVE_BASE_URL="${GLM_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}"
-        ACTIVE_API_KEY="${GLM_API_KEY}"
-        ACTIVE_MODEL="${GLM_MODEL:-GLM-5.2}"
-        ;;
-    ark)
-        ACTIVE_PROVIDER="ark"
-        ACTIVE_BASE_URL="${ARK_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}"
-        ACTIVE_API_KEY="${ARK_API_KEY}"
-        ACTIVE_MODEL="${ARK_MODEL:-doubao-seed-2.1-turbo}"
-        ;;
-    bailian)
-        ACTIVE_PROVIDER="bailian"
-        ACTIVE_BASE_URL="${BAILIAN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}"
-        ACTIVE_API_KEY="${BAILIAN_API_KEY}"
-        ACTIVE_MODEL="${BAILIAN_MODEL:-Qwen3.7-Plus}"
-        ;;
-    *)
-        echo "[warn] 未知 LLM_PLATFORM=${LLM_PLATFORM}，回退到 agnes"
-        ACTIVE_PROVIDER="agnes-ai"
-        ACTIVE_BASE_URL="${AGNES_BASE_URL:-https://api.agnes-ai.cn/v1}"
-        ACTIVE_API_KEY="${AGNES_API_KEY}"
-        ACTIVE_MODEL="${AGNES_MODEL:-agnes-2.5-flash}"
-        ;;
-esac
+configure_platform "${LLM_PLATFORM}"
+# Claude 容器视角下 agnes 全名是 "agnes-ai"（与 deploy.sh / docker-run.sh 对齐）
+if [ "${LLM_PLATFORM}" = "agnes" ]; then
+    ACTIVE_PROVIDER="agnes-ai"
+else
+    ACTIVE_PROVIDER="${LLM_PLATFORM}"
+fi
+ACTIVE_BASE_URL="${LLM_BASE_URL}"
+ACTIVE_API_KEY="${LLM_API_KEY}"
+ACTIVE_MODEL="${LLM_MODEL}"
 
 # 验证 API Key 是否已设置
 if [ -z "${ACTIVE_API_KEY}" ] || echo "${ACTIVE_API_KEY}" | grep -q "^your-"; then

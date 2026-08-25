@@ -43,8 +43,12 @@ WORKDIR /app
 # ---- 复制配置文件 ----
 COPY conf/openclaw/openclaw.default.json /app/conf/openclaw.default.json
 COPY conf/openclaw/init-openclaw.sh /app/conf/init-openclaw.sh
+# 公共函数库（含 configure_platform 等）：镜像内 init-openclaw.sh 直接 source，
+# 不重新在镜像里塞一份完整 cicd/ 树。
+COPY cicd/lib/common.sh /usr/local/lib/devpilot-common.sh
 # 修复 Windows 换行符问题
-RUN sed -i 's/\r$//' /app/conf/init-openclaw.sh && chmod +x /app/conf/init-openclaw.sh
+RUN sed -i 's/\r$//' /app/conf/init-openclaw.sh /usr/local/lib/devpilot-common.sh \
+    && chmod +x /app/conf/init-openclaw.sh /usr/local/lib/devpilot-common.sh
 
 # ---- 环境变量 ----
 ENV OPENCLAW_HOME=/data/openclaw

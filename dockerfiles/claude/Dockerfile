@@ -69,13 +69,16 @@ ENV HOME=/home/node
 # ---- litellm 配置目录（gen_config.py 输出 litellm_config.yaml，需 node 可写） ----
 RUN mkdir -p /opt/litellm && chown -R node:node /opt/litellm /home/node
 
-# ---- 复制启动脚本 + litellm 配置生成器 + 入口脚本 ----
+# ---- 复制启动脚本 + litellm 配置生成器 + 入口脚本 + 公共函数库 ----
 COPY conf/claude/start.sh /usr/local/bin/start.sh
 COPY conf/litellm/gen_config.py /opt/litellm/gen_config.py
 COPY dockerfiles/claude/entrypoint.sh /usr/local/bin/entrypoint.sh
+# 公共函数库（含 configure_platform / validate_config / get_project_root 等）：
+# 镜像内 start.sh 容器化调用，源文件保留 1 份即可。
+COPY cicd/lib/common.sh /usr/local/lib/devpilot-common.sh
 # 修复 Windows 换行符问题
-RUN sed -i 's/\r$//' /usr/local/bin/start.sh /opt/litellm/gen_config.py /usr/local/bin/entrypoint.sh \
-    && chmod +x /usr/local/bin/start.sh /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/start.sh /opt/litellm/gen_config.py /usr/local/bin/entrypoint.sh /usr/local/lib/devpilot-common.sh \
+    && chmod +x /usr/local/bin/start.sh /usr/local/bin/entrypoint.sh /usr/local/lib/devpilot-common.sh
 
 # ---- 以 root 作为默认用户，由 entrypoint 修正挂载点属主后降权回 node（最小权限）----
 # 原因：compose 将宿主机 ./data/devpilot-claude bind mount 到 /home/node，覆盖构建期 chown 结果，

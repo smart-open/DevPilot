@@ -8,6 +8,15 @@ set -e
 # 所有平台均走 OpenAI Chat Completion 协议
 # ============================================================
 
+# 统一 LLM_PLATFORM 解析收敛到 cicd/lib/common.sh:configure_platform()。
+# Dockerfiles/openclaw/Dockerfile 已 COPY 此文件到镜像内
+# /usr/local/lib/devpilot-common.sh，本地开发时回退到相对路径 source。
+if [ -f /usr/local/lib/devpilot-common.sh ]; then
+    source /usr/local/lib/devpilot-common.sh
+elif [ -f "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../cicd/lib/common.sh" ]; then
+    source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../cicd/lib/common.sh"
+fi
+
 OPENCLAW_HOME="/data/openclaw"
 # OpenClaw 实际将运行时配置写入 ${OPENCLAW_HOME}/.openclaw/openclaw.json（隐藏子目录，
 # 行为同 Claude Code 的 ~/.claude）。此前 init 误写为 ${OPENCLAW_HOME}/openclaw.json，
@@ -23,35 +32,12 @@ echo "========================================"
 # ---- 1. 确保数据目录存在 ----
 mkdir -p "${OPENCLAW_HOME}" "${OPENCLAW_CONFIG_DIR}"
 
-# ---- 2. 根据 LLM_PLATFORM 解析当前平台（与 start.sh / llm-init.sh 一致） ----
+# ---- 2. 根据 LLM_PLATFORM 解析当前平台（统一调用 cicd/lib/common.sh） ----
 LLM_PLATFORM="${LLM_PLATFORM:-agnes}"
-case "${LLM_PLATFORM}" in
-    agnes)
-        ACTIVE_PROVIDER="agnes"
-        ACTIVE_MODEL="${AGNES_MODEL:-agnes-2.5-flash}"
-        ;;
-    deepseek)
-        ACTIVE_PROVIDER="deepseek"
-        ACTIVE_MODEL="${DEEPSEEK_MODEL:-DeepSeek-V4-Flash}"
-        ;;
-    glm)
-        ACTIVE_PROVIDER="glm"
-        ACTIVE_MODEL="${GLM_MODEL:-GLM-5.2}"
-        ;;
-    ark)
-        ACTIVE_PROVIDER="ark"
-        ACTIVE_MODEL="${ARK_MODEL:-doubao-seed-2.1-turbo}"
-        ;;
-    bailian)
-        ACTIVE_PROVIDER="bailian"
-        ACTIVE_MODEL="${BAILIAN_MODEL:-Qwen3.7-Plus}"
-        ;;
-    *)
-        echo "[warn] 未知 LLM_PLATFORM=${LLM_PLATFORM}，回退到 agnes"
-        ACTIVE_PROVIDER="agnes"
-        ACTIVE_MODEL="${AGNES_MODEL:-agnes-2.5-flash}"
-        ;;
-esac
+configure_platform "${LLM_PLATFORM}"
+# OpenClaw 视角：agnes → agnes（无 -ai 后缀，与其它平台命名一致）
+ACTIVE_PROVIDER="${LLM_PLATFORM}"
+ACTIVE_MODEL="${LLM_MODEL}"
 ACTIVE_DEFAULT_MODEL="${ACTIVE_PROVIDER}/${ACTIVE_MODEL}"
 
 # ---- 2.1 网关 Token 默认化 ----
