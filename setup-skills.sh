@@ -3,7 +3,7 @@ set -e
 
 # ============================================================
 # DevPilot 技能文件一键搭建脚本
-# 功能：将 skills/ 目录下的技能文件复制到 ~/.openclaw/skills/
+# 功能：将 skills/ 目录下的技能文件复制到 data/openclaw/.openclaw/skills/（容器 OpenClaw 挂载点）
 # 用法: ./setup-skills.sh
 # 依赖：cicd/lib/common.sh（公共函数库）
 # ============================================================
@@ -13,7 +13,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/cicd/lib/common.sh"
 
 SKILLS_DIR="${SCRIPT_DIR}/skills"
-TARGET_DIR="${HOME}/.openclaw/skills"
+# 装到容器 OpenClaw 的挂载点：宿主机 ./data/openclaw/.openclaw/skills 对应容器内
+# /data/openclaw/.openclaw/skills（OPENCLAW_HOME=/data/openclaw，见 openclaw Dockerfile）。
+# 此前装到宿主机 ~/.openclaw/skills 与容器内 /data/openclaw 互不相通，技能无法被读取。
+TARGET_DIR="${SCRIPT_DIR}/data/openclaw/.openclaw/skills"
 
 print_header "DevPilot 技能文件搭建"
 

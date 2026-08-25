@@ -11,7 +11,8 @@
 #         -t devpilot-claude .
 #   - 强制无缓存重建（排查问题 / 跳过所有缓存层）:
 #       docker build --no-cache -f dockerfiles/devpilot-claude/Dockerfile -t devpilot-claude .
-ARG NODE_IMAGE_TAG=22.23.1-bookworm
+# ARG 默认值须与 versions.env 保持一致（直接 docker build 不传参时也能用正确版本）
+ARG NODE_IMAGE_TAG=24.17.0-bookworm
 FROM node:${NODE_IMAGE_TAG}
 
 LABEL org.opencontainers.image.title="devpilot-claude" \
@@ -53,6 +54,11 @@ COPY conf/devpilot-claude/start.sh /usr/local/bin/start.sh
 RUN sed -i 's/\r$//' /usr/local/bin/start.sh \
     && chmod +x /usr/local/bin/start.sh \
     && chown -R node:node /home/node
+
+# ---- 以非 root 用户运行（最小权限）----
+# 注意：宿主机 ./workspace 与 ./data/devpilot-claude 挂载目录需对 node 用户(uid 1000)可写；
+#       否则容器内 Claude Code 写文件会权限失败。部署时可用 init container 或显式 chown 修正属主。
+USER node
 
 # ---- 启动 ----
 CMD ["/usr/local/bin/start.sh"]

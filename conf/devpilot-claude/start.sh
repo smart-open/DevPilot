@@ -78,7 +78,12 @@ fi
 #   - ANTHROPIC_API_KEY  = LITELLM_MASTER_KEY     （litellm general_settings.master_key）
 #   - ANTHROPIC_MODEL     = <platform>/<model>     （与 litellm 注册的 model_name 对应）
 LITELLM_PROXY_URL="${LITELLM_PROXY_URL:-http://litellm:4000}"
-LITELLM_AUTH_KEY="${LITELLM_MASTER_KEY:-sk-devpilot-litellm}"
+LITELLM_AUTH_KEY="${LITELLM_MASTER_KEY}"
+if [ -z "${LITELLM_AUTH_KEY}" ]; then
+    echo "[error] LITELLM_MASTER_KEY 未设置，Claude Code 无法鉴权访问 litellm"
+    echo "[error] 请运行 ./init.sh 自动生成，或在 .env 手动设置 32+ 位随机值"
+    exit 1
+fi
 LLM_PLATFORM_LC="$(echo "${LLM_PLATFORM}" | tr '[:upper:]' '[:lower:]')"
 
 export ANTHROPIC_BASE_URL="${LITELLM_PROXY_URL}"
@@ -105,7 +110,9 @@ fi
 #     "启用 Provider" 按钮会触发桌面端 invoke/check_env_conflicts 导致失败。
 #     此处预先生成，使 Claude Code 不依赖 CC-Switch UI 即可工作。
 CLAUDE_SETTINGS="${CLAUDE_CONFIG_DIR}/settings.json"
-cat > "${CLAUDE_SETTINGS}" <<EOF
+# 仅在首次启动时生成（保留用户自定义；如 .env 改了 LLM_PLATFORM，删除该文件后重启即可重新生成）
+if [ ! -f "${CLAUDE_SETTINGS}" ]; then
+    cat > "${CLAUDE_SETTINGS}" <<EOF
 {
   "env": {
     "ANTHROPIC_BASE_URL": "${LITELLM_PROXY_URL}",
@@ -114,7 +121,11 @@ cat > "${CLAUDE_SETTINGS}" <<EOF
   }
 }
 EOF
-echo "[start] 已生成 Claude Code 配置文件: ${CLAUDE_SETTINGS}"
+    echo "[start] 已生成 Claude Code 配置文件: ${CLAUDE_SETTINGS}"
+else
+    echo "[start] Claude Code 配置已存在，保留用户自定义: ${CLAUDE_SETTINGS}"
+    echo "       如需按 .env 重新生成，删除该文件后重启容器"
+fi
 
 
 echo "[start] 大模型平台配置："
@@ -132,7 +143,10 @@ echo ""
 # ============================================================
 if [ "${DEVPILOT_AUTO_DEPLOY}" = "true" ]; then
     echo "[start] 自动部署已启用，检查 workspace 中的服务..."
-    bash /workspace/cicd/service-deploy/post-dev-hook.sh 2>/dev/null || true
+    # cicd 目录以只读卷挂载到 /opt/devpilot/cicd（见 docker-compose.yml）；
+    # workspace 挂载在 /workspace。显式传 WORKSPACE_DIR，避免 post-dev-hook.sh
+    # 用 SCRIPT_DIR/../.. 推算出 /opt/devpilot/workspace（不存在）导致钩子静默失效。
+    WORKSPACE_DIR=/workspace bash /opt/devpilot/cicd/service-deploy/post-dev-hook.sh 2>/dev/null || true
 fi
 
 # ============================================================

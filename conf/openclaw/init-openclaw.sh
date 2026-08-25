@@ -108,7 +108,11 @@ fi
 # 浏览器经 http://<VM_IP>:18789 访问时，controlUi 默认要求安全认证，
 # 会拦截 WebSocket 握手，表现为“浏览器无法完成 Gateway 连接”。
 # 设为 true 放行（仅建议受信任内网 / 已套反向代理终止 TLS 的场景使用）。
-openclaw config set gateway.controlUi.allowInsecureAuth true 2>/dev/null || true
+if [ "${DEVPILLOT_INSECURE_AUTH:-true}" = "true" ]; then
+    openclaw config set gateway.controlUi.allowInsecureAuth true 2>/dev/null || true
+else
+    openclaw config set gateway.controlUi.allowInsecureAuth false 2>/dev/null || true
+fi
 
 # ---- 3.1.1 确保 Control UI 允许浏览器来源（allowedOrigins，gateway.bind=lan 时强制校验）----
 # 现象：浏览器经 http://localhost:18789/chat（SSH 隧道 / 端口转发）或 http://<VM_IP>:18789
@@ -145,7 +149,10 @@ fi
 
 # ---- 3.3 OpenClaw 现以 network_mode: host 运行，Redis 必须经宿主机回环访问 ----
 # 无论 openclaw.json 是本次新生成还是历史残留，均确保 redis 地址指向 127.0.0.1:6379，
-# 否则 openclaw 在 host 网络下无法解析 bridge 网络的 “redis” 主机名。
+# 否则 openclaw 在 host 网络下无法解析 bridge 网络的 "redis" 主机名。
+# 【回退提示】若将来把 openclaw 改回 bridge 网络（加入 devpilot-network），
+#   必须删除下方 sed 改写，让配置保留 redis:6379 服务名访问；
+#   同时 Redis 的 127.0.0.1:6379 端口绑定也可去掉（bridge 内经服务名访问即可）。
 if [ -f "${CONFIG_FILE}" ]; then
     sed -i 's#@redis:6379#@127.0.0.1:6379#g' "${CONFIG_FILE}"
 fi
@@ -332,4 +339,8 @@ echo "========================================"
 # 正确语法：openclaw gateway [run] --bind lan --allow-unconfigured
 # 配置由 OPENCLAW_HOME（=/data/openclaw）下的 openclaw.json 自动加载，无需 --config。
 # --token 显式兜底（默认值即 OPENCLAW_GATEWAY_TOKEN 环境变量），避免 bind=lan 因缺认证被拒。
-exec openclaw gateway --bind lan --allow-unconfigured --token "${OPENCLAW_GATEWAY_TOKEN}"
+GATEWAY_EXTRA_ARGS=""
+if [ "${DEVPILLOT_INSECURE_AUTH:-true}" = "true" ]; then
+    GATEWAY_EXTRA_ARGS="--allow-unconfigured"
+fi
+exec openclaw gateway --bind lan ${GATEWAY_EXTRA_ARGS} --token "${OPENCLAW_GATEWAY_TOKEN}"

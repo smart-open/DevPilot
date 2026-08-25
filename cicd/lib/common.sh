@@ -106,10 +106,9 @@ validate_required_vars() {
     return 0
 }
 
-# DevPilot 平台部署必需的变量列表
-DEMPILOT_REQUIRED_VARS=(
-    AGNES_API_KEY
-    AGNES_BASE_URL
+# DevPilot 公共必填变量（与所选大模型平台无关）
+DEVPILOT_COMMON_REQUIRED_VARS=(
+    LLM_PLATFORM
     FEISHU_APP_ID
     FEISHU_APP_SECRET
     REDIS_PASSWORD
@@ -121,9 +120,32 @@ DEMPILOT_REQUIRED_VARS=(
     TZ
 )
 
-# 校验 DevPilot 平台部署所需的全部变量
+# 根据 LLM_PLATFORM 返回该平台必填的环境变量名（空格分隔，供 validate_required_vars）
+# 用法: platform_vars=$(get_platform_required_vars)
+get_platform_required_vars() {
+    local platform="${LLM_PLATFORM:-agnes}"
+    local prefix
+    case "${platform}" in
+        agnes)    prefix="AGNES" ;;
+        deepseek) prefix="DEEPSEEK" ;;
+        glm)      prefix="GLM" ;;
+        ark)      prefix="ARK" ;;
+        bailian)  prefix="BAILIAN" ;;
+        *)        prefix="AGNES" ;;  # 未知平台回退 agnes
+    esac
+    echo "${prefix}_API_KEY ${prefix}_BASE_URL ${prefix}_MODEL"
+}
+
+# 校验 DevPilot 平台部署所需的全部变量（公共必填 + 当前 LLM_PLATFORM 对应平台必填）
 validate_devpilot_env() {
-    validate_required_vars "${DEMPILOT_REQUIRED_VARS[@]}"
+    local missing=0
+    # 1) 公共必填变量
+    validate_required_vars "${DEVPILOT_COMMON_REQUIRED_VARS[@]}" || missing=1
+    # 2) 当前 LLM_PLATFORM 对应平台的必填变量
+    local platform_vars
+    platform_vars=$(get_platform_required_vars)
+    validate_required_vars ${platform_vars} || missing=1
+    return ${missing}
 }
 
 # ============================================================

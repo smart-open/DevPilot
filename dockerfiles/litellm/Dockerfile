@@ -15,6 +15,7 @@ LABEL org.opencontainers.image.title="devpilot-litellm" \
 ARG LITELLM_VERSION=1.82.6
 ENV LITELLM_VERSION=${LITELLM_VERSION}
 
+# 供应链加固：固定版本已大幅降低投毒风险；进一步可改用 --require-hashes + pip-compile 锁文件
 RUN pip install --no-cache-dir "litellm==${LITELLM_VERSION}"
 
 WORKDIR /app

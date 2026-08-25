@@ -59,7 +59,11 @@ def main():
             },
         })
 
-    master_key = os.environ.get("LITELLM_MASTER_KEY") or "sk-devpilot-litellm"
+    master_key = os.environ.get("LITELLM_MASTER_KEY", "").strip()
+    if not master_key:
+        print("[gen_config] ERROR: LITELLM_MASTER_KEY 未设置。")
+        print("[gen_config] 请运行 ./init.sh 自动生成，或在 .env 手动设置 32+ 位随机值。")
+        sys.exit(1)
 
     config = {
         "general_settings": {

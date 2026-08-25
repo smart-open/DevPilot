@@ -36,7 +36,9 @@ services:
     # OpenClaw 使用 network_mode: host，需经宿主机回环访问 Redis，故在此发布 6379。
     # 若该端口需对外暴露，请在宿主机防火墙仅放行可信来源。
     ports:
-      - "6379:6379"
+      # 仅监听宿主机回环：供 host 网络模式的 OpenClaw 经 127.0.0.1:6379 访问，
+      # 但不对宿主机之外暴露（避免未授权扫描/爆破）。生产环境切勿开放外网。
+      - "127.0.0.1:6379:6379"
     logging: *default-logging
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
@@ -72,7 +74,7 @@ services:
     environment:
       - TZ=${TZ}
       - LLM_PLATFORM=${LLM_PLATFORM}
-      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-devpilot-litellm}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - LITELLM_PROXY_URL=${LITELLM_PROXY_URL:-http://litellm:4000}
 
       # Agnes AI 平台
@@ -109,6 +111,8 @@ services:
       - FEISHU_APP_SECRET=${FEISHU_APP_SECRET}
       - FEISHU_BOT_NAME=${FEISHU_BOT_NAME:-DevPilot助手}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      # Web UI HTTP 明文访问放行开关（默认 true 兼容 VM 直连；生产套反代+TLS 后设 false）
+      - DEVPILLOT_INSECURE_AUTH=${DEVPILLOT_INSECURE_AUTH:-true}
     volumes:
       - ./data/openclaw:/data/openclaw
       - ./logs/openclaw:/logs
@@ -116,10 +120,21 @@ services:
     # （如 192.168.106.128）而非容器内网 172.x 地址；控制 UI 的 WebSocket 广播地址
     # 因此变为 ws://<VM_IP>:18789，浏览器经 http(s)://<VM_IP>:18789 可同源直连。
     # 注意：host 模式下不再需要 ports 映射（网关直接绑定宿主机端口）。
+    #
+    # 【安全评估 · 待测试后改回 bridge】host 网络是多个安全妥协的根源：
+    #   1) Redis/LiteLLM 被迫暴露宿主机（已用 127.0.0.1 绑定缓解，见各 ports）
+    #   2) init-openclaw.sh 须把 redis:6379 改写为 127.0.0.1:6379
+    #   3) macOS/Windows Docker Desktop 对 host 网络支持有限
+    # 改回 bridge 时需同步：① 恢复 ports 映射（18789:18789）② 删除 init-openclaw.sh
+    #   的 redis→127.0.0.1 改写 ③ 验证 gateway --bind lan 在 bridge 下 WebSocket 广播
+    #   地址是否正确（可能需通过环境变量显式指定广播 IP）。
     network_mode: "host"
     logging: *default-logging
     healthcheck:
-      test: ["CMD", "claude", "--version"]
+      # OpenClaw 容器已安装 curl（见 Dockerfile），网关提供 /healthz 端点。
+      # 注意：此前误用 claude --version，但 claude CLI 装在 devpilot-claude 容器，
+      # 本容器无此二进制，导致健康检查永远失败。务必用 curl /healthz。
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:18789/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -154,7 +169,7 @@ services:
     environment:
       - TZ=${TZ}
       - LLM_PLATFORM=${LLM_PLATFORM}
-      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-devpilot-litellm}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - LITELLM_PROXY_URL=${LITELLM_PROXY_URL:-http://litellm:4000}
 
       # Agnes AI 平台
@@ -195,6 +210,10 @@ services:
       - ./workspace:/workspace
       - ./data/devpilot-claude:/home/node
       - ./logs/devpilot-claude:/logs
+      # cicd 目录以只读卷挂载，供 start.sh 的自动部署钩子（post-dev-hook.sh）调用。
+      # .dockerignore 仅影响构建上下文，不影响运行时挂载；故镜像内不含 cicd，
+      # 但容器运行时可通过此挂载访问宿主机 cicd/ 下的部署脚本。
+      - ./cicd:/opt/devpilot/cicd:ro
     networks:
       - devpilot-network
     logging: *default-logging
@@ -232,7 +251,7 @@ services:
     profiles: ["", "full", "dev"]
     environment:
       - TZ=${TZ}
-      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-devpilot-litellm}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
 
       # 5 个平台凭据与端点（仅 key 有效的平台会被 gen_config.py 注册为模型）
       - AGNES_API_KEY=${AGNES_API_KEY}
@@ -255,7 +274,9 @@ services:
       - BAILIAN_BASE_URL=${BAILIAN_BASE_URL}
       - BAILIAN_MODEL=${BAILIAN_MODEL}
     ports:
-      - "4000:4000"
+      # 仅监听宿主机回环：供宿主机侧脚本（service.sh/verify.sh）curl 健康检查，
+      # 但不对外暴露。master_key 必须在 .env 配置强随机值（LITELLM_MASTER_KEY）。
+      - "127.0.0.1:4000:4000"
     networks:
       - devpilot-network
     logging: *default-logging

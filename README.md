@@ -75,7 +75,7 @@ vi .env  # 修改 LLM_PLATFORM=deepseek，配置 DEEPSEEK_API_KEY
 |------|------|------|------|
 | Redis | `redis:8.8.1-alpine3.23` | 6379（内部） | 缓存 + AOF/RDB 持久化 |
 | OpenClaw | `node:24.17.0` + `openclaw@2026.7.1-2` | 18789 | 飞书 AI 机器人（WebSocket 长连接）+ 多平台大模型对接 |
-| Claude Code | `node:24.17.0` + `claude-code@2.1.220` | (无宿主端口，CLI 调用) | 编程助手 + Git |
+| Claude Code | `node:24.17.0` + `claude-code@2.1.241` | (无宿主端口，CLI 调用) | 编程助手 + Git |
 | devpilot-litellm | `python:3.13-slim` + `litellm==1.82.6` | (容器内 4000，仅 docker network 内可达) | Anthropic ↔ OpenAI 协议翻译（CC-Switch 本地路由能力的复刻） |
 
 > 组件版本统一在 [`versions.env`](versions.env) 中管理，这是版本号的单一配置源。修改版本只需编辑该文件，本地脚本与 Dockerfile 会自动加载，无需多处同步。
@@ -116,7 +116,7 @@ make down        # 停止服务
 make logs        # 查看日志
 make health      # 健康检查
 make claude      # 启动 Claude Code
-make setup-skills # 安装技能文件到 ~/.openclaw/skills/
+make setup-skills # 安装技能文件到 data/openclaw/.openclaw/skills/
 make help        # 查看所有命令
 ```
 
@@ -154,7 +154,7 @@ DEVPILOT_AUTO_DEPLOY=true
 make setup-skills    # 或 ./setup-skills.sh
 ```
 
-技能文件将复制到 `~/.openclaw/skills/` 目录，支持多技术栈（Node.js / Python / Go / Java / Rust / .NET / PHP）、多部署目标（Docker / Docker Compose / K8s / Helm）和多代码托管平台（GitHub / Gitee / GitLab）。代码审查阶段使用 `alibaba/open-code-review`（TRAE-code-review）技能对代码变更进行智能审查。
+技能文件将复制到 `data/openclaw/.openclaw/skills/` 目录，支持多技术栈（Node.js / Python / Go / Java / Rust / .NET / PHP）、多部署目标（Docker / Docker Compose / K8s / Helm）和多代码托管平台（GitHub / Gitee / GitLab）。代码审查阶段使用 `alibaba/open-code-review`（TRAE-code-review）技能对代码变更进行智能审查。
 
 ## 目录结构
 
@@ -165,7 +165,7 @@ devpilot/
 ├── init.sh                     # 配置向导（选择大模型平台、配置 API Key）
 ├── deploy.sh                   # 一键部署脚本（7 步详细日志）
 ├── service.sh                  # 一键启停脚本（start/stop/restart/status/health/logs）
-├── setup-skills.sh             # 技能文件安装脚本（复制到 ~/.openclaw/skills/）
+├── setup-skills.sh             # 技能文件安装脚本（复制到 data/openclaw/.openclaw/skills/）
 ├── versions.env                # 组件版本单一配置源
 ├── .env / .env.example         # 环境变量（含多平台配置）
 ├── .dockerignore               # Docker 构建优化
@@ -183,13 +183,16 @@ devpilot/
 │   ├── test-SKILL.md           # 测试验证
 │   └── deploy-SKILL.md         # 提交部署
 ├── scripts/                    # 工具脚本
-│   └── llm-init.sh             # 多平台大模型统一初始化脚本
+│   ├── llm-init.sh             # 多平台大模型统一初始化脚本
+│   ├── rebuild.sh              # 全量清空重建脚本（down→迁移→清→rebuild→up→验证）
+│   └── verify.sh               # 端到端验证脚本（镜像/容器/litellm/Claude/OpenClaw/Redis）
 ├── cicd/                       # CI/CD 配置
 │   ├── lib/common.sh           # 公共函数库（颜色/日志/校验/健康检查）
 │   ├── ci/                     # 平台 CI（GitHub / Gitee / GitLab）
 │   │   └── scripts/lint.sh     # 统一 CI Lint 检查脚本
 │   ├── cd/                     # 平台 CD（Docker / K8s Helm）
 │   └── service-deploy/         # 服务自动部署（开发完成 -> 自动构建部署）
+├── devpilot-multitenant-plan/ # 多租户方案实施计划（_shared、assets）
 └── workspace/                  # Claude Code 工作目录（开发的服务存放于此）
 ```
 

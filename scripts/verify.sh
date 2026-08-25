@@ -88,7 +88,8 @@ fi
 # Anthropic 协议打 litellm（验证 /v1/messages 路由 + master_key 校验 + 上游转发）
 MASTER_KEY=$(docker exec devpilot-litellm env 2>/dev/null | grep -oE 'LITELLM_MASTER_KEY=[^ ]+' | head -1 | cut -d= -f2)
 if [ -z "$MASTER_KEY" ]; then
-    MASTER_KEY="sk-devpilot-litellm"
+    check_warn "未从 litellm 容器读取到 LITELLM_MASTER_KEY（配置异常或容器未启动）"
+    MASTER_KEY=""
 fi
 ACTIVE_MODEL=$(docker exec devpilot-litellm cat /app/litellm_config.yaml 2>/dev/null | grep -oE 'model_name: [^ ]+' | head -1 | awk '{print $2}')
 if [ -z "$ACTIVE_MODEL" ]; then

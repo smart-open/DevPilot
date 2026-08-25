@@ -9,6 +9,8 @@
 # ---- 变量 ----
 COMPOSE := docker compose
 DC_ENV  := --env-file .env
+# 加载 .env 中的变量供 recipe 直接引用（如 $(REDIS_PASSWORD)），避免脆弱的 grep|cut 解析
+-include .env
 
 # ---- 颜色 ----
 BLUE   := \033[34m
@@ -95,9 +97,9 @@ ps: ## 查看容器状态
 health: ## 健康检查所有服务
 	@printf "$(BLUE)=== 健康检查 ===$(RESET)\n"
 	@printf "Redis:     "
-	@$(COMPOSE) exec -T redis redis-cli -a "$$(grep REDIS_PASSWORD .env | cut -d= -f2)" ping 2>/dev/null && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
+	@$(COMPOSE) exec -T redis redis-cli -a "$(REDIS_PASSWORD)" ping 2>/dev/null && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
 	@printf "OpenClaw:  "
-	@curl -sf http://localhost:$$(grep OPENCLAW_GATEWAY_PORT .env | cut -d= -f2)/healthz >/dev/null 2>&1 && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
+	@curl -sf http://localhost:$(OPENCLAW_GATEWAY_PORT)/healthz >/dev/null 2>&1 && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
 	@printf "litellm:   "
 	@curl -sf http://localhost:4000/health/liveliness >/dev/null 2>&1 && printf "$(GREEN)OK$(RESET)\n" || printf "$(RED)FAIL$(RESET)\n"
 	@printf "Claude:    "
@@ -115,7 +117,7 @@ claude: ## 启动 Claude Code 交互式会话
 
 .PHONY: redis-cli
 redis-cli: ## 进入 Redis CLI
-	$(COMPOSE) exec redis redis-cli -a "$$(grep REDIS_PASSWORD .env | cut -d= -f2)"
+	$(COMPOSE) exec redis redis-cli -a "$(REDIS_PASSWORD)"
 
 .PHONY: openclaw-shell
 openclaw-shell: ## 进入 OpenClaw 容器 bash
@@ -142,7 +144,7 @@ update: ## 修改版本号后重新构建并启动
 .PHONY: backup
 backup: ## 备份 Redis 数据和 OpenClaw 配置
 	@printf "$(BLUE)备份数据...$(RESET)\n"
-	@$(COMPOSE) exec -T redis redis-cli -a "$$(grep REDIS_PASSWORD .env | cut -d= -f2)" BGSAVE >/dev/null 2>&1
+	@$(COMPOSE) exec -T redis redis-cli -a "$(REDIS_PASSWORD)" BGSAVE >/dev/null 2>&1
 	@mkdir -p backups
 	@cp -r data/redis/dump.rdb "backups/dump-$$(date +%Y%m%d%H%M%S).rdb" 2>/dev/null || printf "$(YELLOW)Redis RDB 文件不存在，跳过$(RESET)\n"
 	@cp data/openclaw/.openclaw/openclaw.json "backups/openclaw-$$(date +%Y%m%d%H%M%S).json" 2>/dev/null || printf "$(YELLOW)OpenClaw 配置不存在，跳过$(RESET)\n"
@@ -180,7 +182,7 @@ reset-openclaw: ## 重置 OpenClaw 配置（重新生成）
 ##@ 技能管理
 
 .PHONY: setup-skills
-setup-skills: ## 安装技能文件到 ~/.openclaw/skills/
+setup-skills: ## 安装技能文件到 data/openclaw/.openclaw/skills/（容器挂载点）
 	@bash ./setup-skills.sh
 
 ##@ 服务管理（service.sh）

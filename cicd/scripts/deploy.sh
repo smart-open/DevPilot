@@ -194,13 +194,27 @@ case "${DEPLOY_MODE}" in
         fi
 
         # 从 .env 生成 Helm values 覆盖文件
-        HELM_OVERRIDE="${CICD_DIR}/cd/k8s/helm/values-override.yaml"
-        info "从 .env 生成 Helm values 覆盖文件 ..."
+        # 【安全】用 mktemp + chmod 600 避免密钥明文落盘（含 API Key/App Secret/Redis 密码等）；
+        #         此前写到固定路径 values-override.yaml，明文落盘有泄露风险。
+        HELM_OVERRIDE="$(mktemp /tmp/devpilot-values-XXXXXX.yaml)"
+        chmod 600 "${HELM_OVERRIDE}"
+        info "从 .env 生成 Helm values 覆盖文件（临时文件权限 600）..."
+
+        # 按 LLM_PLATFORM 动态生成对应平台段（此前硬编码 agnes，导致 K8s 部署仅支持 agnes）
+        case "${LLM_PLATFORM:-agnes}" in
+            agnes)    P_NAME="agnes";    P_KEY="${AGNES_API_KEY}";    P_BASE="${AGNES_BASE_URL}" ;;
+            deepseek) P_NAME="deepseek"; P_KEY="${DEEPSEEK_API_KEY}"; P_BASE="${DEEPSEEK_BASE_URL}" ;;
+            glm)      P_NAME="glm";      P_KEY="${GLM_API_KEY}";      P_BASE="${GLM_BASE_URL}" ;;
+            ark)      P_NAME="ark";      P_KEY="${ARK_API_KEY}";      P_BASE="${ARK_BASE_URL}" ;;
+            bailian)  P_NAME="bailian";  P_KEY="${BAILIAN_API_KEY}";  P_BASE="${BAILIAN_BASE_URL}" ;;
+            *)        P_NAME="agnes";    P_KEY="${AGNES_API_KEY}";    P_BASE="${AGNES_BASE_URL}" ;;
+        esac
+
         cat > "${HELM_OVERRIDE}" <<EOF
-# 自动生成的 values 覆盖文件（请勿手动编辑）
-agnes:
-  apiKey: "${AGNES_API_KEY}"
-  baseUrl: "${AGNES_BASE_URL}"
+# 自动生成的 values 覆盖文件（含密钥，权限 600，部署后自动删除，请勿手动编辑）
+${P_NAME}:
+  apiKey: "${P_KEY}"
+  baseUrl: "${P_BASE}"
 feishu:
   appId: "${FEISHU_APP_ID}"
   appSecret: "${FEISHU_APP_SECRET}"
@@ -209,13 +223,16 @@ redis:
 openclaw:
   gatewayToken: "${OPENCLAW_GATEWAY_TOKEN}"
   gatewayPort: ${OPENCLAW_GATEWAY_PORT}
+litellm:
+  masterKey: "${LITELLM_MASTER_KEY}"
 ccSwitchClaude:
   autoDeploy: "${DEVPILOT_AUTO_DEPLOY:-false}"
 global:
   tz: "${TZ}"
+llmPlatform: "${LLM_PLATFORM:-agnes}"
 nodeImageTag: "${NODE_IMAGE_TAG}"
 EOF
-        success "values 覆盖文件已生成: ${HELM_OVERRIDE}"
+        success "values 覆盖文件已生成（权限 600，平台=${LLM_PLATFORM:-agnes}，含 litellm 段）"
 
         # 执行 Helm 部署
         RELEASE_NAME="devpilot"
@@ -233,7 +250,7 @@ EOF
 
         success "Helm 部署完成"
 
-        # 清理临时文件
+        # 清理临时文件（含密钥，部署后立即删除）
         rm -f "${HELM_OVERRIDE}"
         ;;
 
@@ -269,8 +286,9 @@ health_check_docker() {
         warn "OpenClaw: 容器未运行"
     fi
 
-    # devpilot-litellm（容器内 4000 端口，docker network 内可达）
-    if docker ps --format '{{.Names}}' | grep -q "devpilot-claude"; then
+    # devpilot-litellm（容器内 4000；宿主机经 127.0.0.1:4000 暴露）
+    if docker ps --format '{{.Names}}' | grep -q "devpilot-litellm"; then
+        wait_for_container_http "devpilot-litellm" 4000 "/health/liveliness" 3 2 || true
     else
         warn "devpilot-litellm: 容器未运行"
     fi

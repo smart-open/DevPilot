@@ -369,7 +369,6 @@ if [ -f "versions.env" ]; then
     detail "  Node.js:       ${NODE_IMAGE_TAG}"
     detail "  OpenClaw:      ${OPENCLAW_VERSION}"
     detail "  Claude Code:   ${CLAUDE_CODE_VERSION}"
-    detail "  Claude Code:   ${CLAUDE_CODE_VERSION}"
 fi
 
 # 逐项检查环境变量（敏感信息掩码）
@@ -398,15 +397,35 @@ check_env_var() {
     fi
 }
 
+# 读取当前选择的大模型平台（按 LLM_PLATFORM 动态校验对应平台变量，而非硬编码 agnes）
+LLM_PLATFORM=$(grep "^LLM_PLATFORM=" .env 2>/dev/null | cut -d'=' -f2-)
+if [ -z "${LLM_PLATFORM}" ]; then
+    LLM_PLATFORM="agnes"
+    warn "LLM_PLATFORM 未设置，默认 agnes"
+fi
+case "${LLM_PLATFORM}" in
+    agnes)    PLATFORM_NAME="Agnes AI";        PFX="AGNES" ;;
+    deepseek) PLATFORM_NAME="DeepSeek";        PFX="DEEPSEEK" ;;
+    glm)      PLATFORM_NAME="GLM（智谱）";      PFX="GLM" ;;
+    ark)      PLATFORM_NAME="火山方舟（ARK）";  PFX="ARK" ;;
+    bailian)  PLATFORM_NAME="百炼";             PFX="BAILIAN" ;;
+    *)        PLATFORM_NAME="Agnes AI(默认)";   PFX="AGNES"; LLM_PLATFORM="agnes" ;;
+esac
+detail "当前大模型平台: ${LLM_PLATFORM} (${PLATFORM_NAME})"
+
 ENV_ERRORS=0
-check_env_var "AGNES_API_KEY"          "agnes-ai API Key"     "secret" || ENV_ERRORS=$((ENV_ERRORS + 1))
-check_env_var "AGNES_BASE_URL"         "agnes-ai API 地址"     ""       || ENV_ERRORS=$((ENV_ERRORS + 1))
+# ---- 通用必填项（与平台无关） ----
 check_env_var "FEISHU_APP_ID"          "飞书 App ID"          ""       || ENV_ERRORS=$((ENV_ERRORS + 1))
 check_env_var "FEISHU_APP_SECRET"      "飞书 App Secret"      "secret" || ENV_ERRORS=$((ENV_ERRORS + 1))
 check_env_var "REDIS_PASSWORD"         "Redis 密码"           "secret" || ENV_ERRORS=$((ENV_ERRORS + 1))
+check_env_var "LITELLM_MASTER_KEY"     "LiteLLM Master Key"   "secret" || ENV_ERRORS=$((ENV_ERRORS + 1))
 check_env_var "OPENCLAW_GATEWAY_TOKEN" "Gateway Token"        "secret" || ENV_ERRORS=$((ENV_ERRORS + 1))
 check_env_var "OPENCLAW_GATEWAY_PORT"  "Gateway 端口"         ""       || ENV_ERRORS=$((ENV_ERRORS + 1))
 check_env_var "TZ"                     "时区"                 ""       || ENV_ERRORS=$((ENV_ERRORS + 1))
+# ---- 当前平台必填项（按 LLM_PLATFORM 动态） ----
+check_env_var "${PFX}_API_KEY"  "${PLATFORM_NAME} API Key"  "secret" || ENV_ERRORS=$((ENV_ERRORS + 1))
+check_env_var "${PFX}_BASE_URL" "${PLATFORM_NAME} API 地址" ""       || ENV_ERRORS=$((ENV_ERRORS + 1))
+check_env_var "${PFX}_MODEL"    "${PLATFORM_NAME} 模型"     ""       || ENV_ERRORS=$((ENV_ERRORS + 1))
 
 if [ ${ENV_ERRORS} -gt 0 ]; then
     echo ""
@@ -469,7 +488,7 @@ docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/nul
 done
 
 # 逐容器检查
-for container in devpilot-redis devpilot-openclaw devpilot-claude; do
+for container in devpilot-redis devpilot-openclaw devpilot-claude devpilot-litellm; do
     detail "检查容器: ${container}"
     if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
         local_status=$(docker inspect --format '{{.State.Status}}' "${container}" 2>/dev/null)
@@ -479,7 +498,12 @@ for container in devpilot-redis devpilot-openclaw devpilot-claude; do
     else
         error "容器未运行: ${container}"
         detail "  最后 20 行日志:"
-        docker compose logs --tail 20 "${container/devpilot-/}" 2>/dev/null | head -20 | while read -r line; do
+        # 容器名 → compose 服务名映射：devpilot-claude 的 compose 服务名带前缀，不能简单去前缀
+        case "${container}" in
+            devpilot-claude) svc_name="devpilot-claude" ;;
+            devpilot-*)      svc_name="${container#devpilot-}" ;;
+        esac
+        docker compose logs --tail 20 "${svc_name}" 2>/dev/null | head -20 | while read -r line; do
             detail "    ${line}"
         done
     fi
@@ -490,7 +514,7 @@ detail "检查端口绑定..."
 GATEWAY_PORT=$(grep "^OPENCLAW_GATEWAY_PORT=" .env | cut -d'=' -f2)
 REDIS_PASS=$(grep "^REDIS_PASSWORD=" .env | cut -d'=' -f2)
 
-for port_info in "OpenClaw:${GATEWAY_PORT}" "CC-Switch:${WEB_PORT}"; do
+for port_info in "OpenClaw:${GATEWAY_PORT}" "litellm:4000"; do
     name="${port_info%%:*}"
     port="${port_info##*:}"
     if command -v ss &>/dev/null; then
@@ -530,7 +554,7 @@ echo ""
 echo -e "${CYAN}服务地址:${NC}"
 echo "  Redis:        容器内部 :6379"
 echo "  OpenClaw:     http://localhost:${GATEWAY_PORT}"
-echo "  CC-Switch:    http://localhost:${WEB_PORT}"
+echo "  litellm:      http://localhost:4000（Claude Code 经 docker network 访问 litellm:4000）"
 echo ""
 echo -e "${CYAN}常用命令:${NC}"
 echo "  启动 Claude Code:   docker compose exec devpilot-claude claude"
@@ -542,10 +566,10 @@ echo ""
 echo -e "${CYAN}飞书机器人:${NC}"
 echo "  在飞书中搜索并添加你的机器人，发送消息即可获得 AI 回复"
 echo ""
-echo -e "${CYAN}CC-Switch 配置:${NC}"
-echo "  1. 浏览器打开 http://localhost:${WEB_PORT}"
-echo "  2. 添加 agnes-ai 供应商（API Key 在 .env 文件中）"
-echo "  3. 启用 Claude Code takeover"
+echo -e "${CYAN}Claude Code（经 devpilot-litellm 路由）:${NC}"
+echo "  1. 启动会话: docker compose exec devpilot-claude claude"
+echo "  2. 路由: Claude Code -> http://litellm:4000 -> 当前平台 OpenAI 兼容端点"
+echo "  3. 配置已由 start.sh 自动写入 ~/.claude/settings.json，无需手动操作"
 echo ""
 
 # 打印本次部署生效的访问凭据（OpenClaw Token）
@@ -562,7 +586,7 @@ echo "========================================"
     echo "时间: $(date '+%Y-%m-%d %H:%M:%S')"
     echo "状态: 完成"
     echo "OpenClaw:  http://localhost:${GATEWAY_PORT}"
-    echo "CC-Switch: http://localhost:${WEB_PORT}"
+    echo "litellm:   http://localhost:4000"
     echo "日志文件:  ${LOG_FILE}"
 } >> "${LOG_FILE}"
 

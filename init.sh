@@ -38,9 +38,9 @@ read_input() {
 
     read -r input
     if [ -z "${input}" ] && [ -n "${default}" ]; then
-        eval "${var_name}=\"${default}\""
+        printf -v "${var_name}" '%s' "${default}"
     else
-        eval "${var_name}=\"${input}\""
+        printf -v "${var_name}" '%s' "${input}"
     fi
 }
 
@@ -251,7 +251,8 @@ read_input "是否启用自动部署 (true/false)" "false" "DEVPILOT_AUTO_DEPLOY
 info "自动生成安全密码..."
 REDIS_PASSWORD=$(gen_password 32)
 OPENCLAW_GATEWAY_TOKEN=$(gen_password 32)
-success "Redis 密码与 Gateway Token 已生成"
+LITELLM_MASTER_KEY=$(gen_password 32)
+success "Redis 密码 / Gateway Token / LiteLLM Master Key 已生成"
 
 # ============================================================
 # 7. 生成 .env 文件
@@ -312,6 +313,10 @@ OPENCLAW_GATEWAY_PORT=${OPENCLAW_GATEWAY_PORT}
 
 # ---- 注：CC-Switch Web v0.21.0 已移除，主路由由 devpilot-litellm 承担 ----
 
+# ---- LiteLLM 代理配置（Claude Code 经此路由访问各平台 OpenAI 兼容端点）----
+LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+LITELLM_PROXY_URL=http://litellm:4000
+
 # ---- Claude Code 配置 ----
 CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION}
 
@@ -367,6 +372,7 @@ esac
 echo -e "  飞书 App ID:   ${FEISHU_APP_ID}"
 echo -e "  Redis 密码:    $(echo "${REDIS_PASSWORD}" | sed 's/./*/g')"
 echo -e "  Gateway Token: $(echo "${OPENCLAW_GATEWAY_TOKEN}" | sed 's/./*/g')"
+echo -e "  LiteLLM Key:   $(echo "${LITELLM_MASTER_KEY}" | sed 's/./*/g')"
 echo -e "  Gateway 端口:  ${OPENCLAW_GATEWAY_PORT}"
 echo -e "  自动部署:      ${DEVPILOT_AUTO_DEPLOY}"
 echo ""

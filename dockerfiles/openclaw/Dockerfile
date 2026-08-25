@@ -11,7 +11,8 @@
 #         -t devpilot-openclaw .
 #   - 强制无缓存重建（排查问题 / 跳过所有缓存层）:
 #       docker build --no-cache -f dockerfiles/openclaw/Dockerfile -t devpilot-openclaw .
-ARG NODE_IMAGE_TAG=22.23.1-bookworm
+# ARG 默认值须与 versions.env 保持一致（直接 docker build 不传参时也能用正确版本）
+ARG NODE_IMAGE_TAG=24.17.0-bookworm
 FROM node:${NODE_IMAGE_TAG}
 
 LABEL org.opencontainers.image.title="devpilot-openclaw" \
