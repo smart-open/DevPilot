@@ -106,15 +106,22 @@ debug "  REDIS_PASS: $(if [ -n "${REDIS_PASS}" ]; then echo '已设置'; else ec
 read_llm_config() {
     debug "读取大模型平台配置..."
 
+    # 与 deploy.sh 同源问题：configure_platform() 通过 ${AGNES_API_KEY} 等读
+    # shell env。若调用方未 source .env，变量为空 → configure_platform 误报
+    # "未设置或仍为占位符"。在调它之前先一次性 load_env（service.sh 行 31 已
+    # cd 到 SCRIPT_DIR 即 PROJECT_ROOT，.env 相对路径安全）。
+    if [ -f "${SCRIPT_DIR}/.env" ]; then
+        load_env "${SCRIPT_DIR}/.env" || return 1
+    fi
+
     LLM_PLATFORM=$(grep "^LLM_PLATFORM=" .env | cut -d'=' -f2)
     if [ -z "${LLM_PLATFORM}" ]; then
         LLM_PLATFORM="agnes"
         debug "  LLM_PLATFORM 未设置，默认为 agnes"
     fi
 
-    # 平台配置统一从 common.sh:configure_platform() 导出；之前反向 grep .env
-    # 此处直接调用即可（要求调用方先 load_env，否则 configure_platform 会因 API Key
-    # 为占位符而失败，但 service.sh 健康检查路径上 .env 一定已 source）。
+    # 平台配置统一从 common.sh:configure_platform() 导出；通过上一步
+    # load_env，shell env 中已有真实 *_API_KEY，configure_platform 可成功。
     configure_platform "${LLM_PLATFORM}"
 
     debug "  LLM_PLATFORM: ${LLM_PLATFORM}"
