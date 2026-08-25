@@ -91,7 +91,7 @@ docker build \
     --build-arg "NODE_IMAGE_TAG=${NODE_IMAGE_TAG}" \
     -t devpilot-claude:latest \
     -t "devpilot-claude:${CLAUDE_CODE_VERSION}" \
-    -f dockerfiles/devpilot-claude/Dockerfile \
+    -f dockerfiles/claude/Dockerfile \
     .
 success "devpilot-claude 镜像构建完成"
 

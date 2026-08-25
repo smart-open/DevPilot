@@ -6,11 +6,11 @@
 #   - 启用 BuildKit 以支持缓存挂载（--mount=type=cache）:
 #       export DOCKER_BUILDKIT=1
 #   - 常规构建:
-#       docker build -f dockerfiles/devpilot-claude/Dockerfile \
+#       docker build -f dockerfiles/claude/Dockerfile \
 #         --build-arg CLAUDE_CODE_VERSION=2.1.241 \
 #         -t devpilot-claude .
 #   - 强制无缓存重建（排查问题 / 跳过所有缓存层）:
-#       docker build --no-cache -f dockerfiles/devpilot-claude/Dockerfile -t devpilot-claude .
+#       docker build --no-cache -f dockerfiles/claude/Dockerfile -t devpilot-claude .
 # ARG 默认值须与 versions.env 保持一致（直接 docker build 不传参时也能用正确版本）
 ARG NODE_IMAGE_TAG=24.17.0-bookworm
 FROM node:${NODE_IMAGE_TAG}
@@ -49,7 +49,7 @@ WORKDIR /workspace
 ENV HOME=/home/node
 
 # ---- 复制启动脚本并初始化目录（合并为单层） ----
-COPY conf/devpilot-claude/start.sh /usr/local/bin/start.sh
+COPY conf/claude/start.sh /usr/local/bin/start.sh
 # 修复 Windows 换行符问题
 RUN sed -i 's/\r$//' /usr/local/bin/start.sh \
     && chmod +x /usr/local/bin/start.sh \

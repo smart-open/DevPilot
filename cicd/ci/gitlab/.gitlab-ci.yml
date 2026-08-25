@@ -80,7 +80,7 @@ lint:dockerfiles:
   script:
     - echo "==> 检查 Dockerfile 是否存在 ..."
     - |
-      for df in dockerfiles/openclaw/Dockerfile dockerfiles/devpilot-claude/Dockerfile; do
+      for df in dockerfiles/openclaw/Dockerfile dockerfiles/claude/Dockerfile; do
         if [ -f "$df" ]; then
           echo "  [OK] $df"
         else
@@ -172,7 +172,7 @@ build:devpilot-claude:
         --cache-to type=registry,ref=${IMAGE_DEVPIOT_CLAUDE}:buildcache,mode=max \
         -t ${IMAGE_DEVPIOT_CLAUDE}:latest \
         -t ${IMAGE_DEVPIOT_CLAUDE}:${CI_COMMIT_SHORT_SHA} \
-        -f dockerfiles/devpilot-claude/Dockerfile \
+        -f dockerfiles/claude/Dockerfile \
         .
     - echo "  [OK] devpilot-claude 镜像构建完成"
     - docker save ${IMAGE_DEVPIOT_CLAUDE}:${CI_COMMIT_SHORT_SHA} -o devpilot-claude-image.tar

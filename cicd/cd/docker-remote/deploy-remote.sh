@@ -258,7 +258,7 @@ else
         --build-arg "CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION}" \
         --build-arg "NODE_IMAGE_TAG=${NODE_IMAGE_TAG}" \
         -t devpilot-claude:latest \
-        -f dockerfiles/devpilot-claude/Dockerfile \
+        -f dockerfiles/claude/Dockerfile \
         .
     success "CC-Switch+Claude 镜像远程构建完成"
 

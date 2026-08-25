@@ -17,7 +17,7 @@ workspace/*
 !workspace/.gitkeep
 
 # CC-Switch 运行时配置
-conf/devpilot-claude/runtime/
+conf/claude/runtime/
 
 # Helm 临时文件
 cicd/cd/k8s/helm/values-override.yaml

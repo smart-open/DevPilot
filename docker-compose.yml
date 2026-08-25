@@ -154,7 +154,7 @@ services:
     image: devpilot-claude:latest
     build:
       context: .
-      dockerfile: dockerfiles/devpilot-claude/Dockerfile
+      dockerfile: dockerfiles/claude/Dockerfile
       args:
         CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.241}
         NODE_IMAGE_TAG: ${NODE_IMAGE_TAG}

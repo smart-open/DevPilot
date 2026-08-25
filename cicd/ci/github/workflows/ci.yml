@@ -59,7 +59,7 @@ jobs:
       - name: 检查 Dockerfile 是否存在
         run: |
           echo "==> 检查 Dockerfile 是否存在 ..."
-          for df in dockerfiles/openclaw/Dockerfile dockerfiles/devpilot-claude/Dockerfile; do
+          for df in dockerfiles/openclaw/Dockerfile dockerfiles/claude/Dockerfile; do
             if [ -f "$df" ]; then
               echo "  [OK] $df"
             else
@@ -195,7 +195,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: dockerfiles/devpilot-claude/Dockerfile
+          file: dockerfiles/claude/Dockerfile
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -210,7 +210,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: dockerfiles/devpilot-claude/Dockerfile
+          file: dockerfiles/claude/Dockerfile
           push: false
           load: true
           tags: devpilot-claude:ci-scan
@@ -255,7 +255,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: dockerfiles/devpilot-claude/Dockerfile
+          file: dockerfiles/claude/Dockerfile
           push: false
           load: true
           tags: devpilot-claude:ci-scan

@@ -448,7 +448,7 @@ step_begin 4 "构建 Docker 镜像"
 
 detail "构建配置:"
 detail "  OpenClaw Dockerfile:    dockerfiles/openclaw/Dockerfile"
-detail "  CC-Switch Dockerfile:   dockerfiles/devpilot-claude/Dockerfile"
+detail "  CC-Switch Dockerfile:   dockerfiles/claude/Dockerfile"
 detail "  构建上下文:             ${SCRIPT_DIR}"
 detail "  .dockerignore:          已启用"
 

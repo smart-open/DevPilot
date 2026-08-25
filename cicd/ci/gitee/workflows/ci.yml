@@ -69,7 +69,7 @@ stages:
             script: |
               #!/bin/bash
               echo "==> 检查 Dockerfile 是否存在 ..."
-              for df in dockerfiles/openclaw/Dockerfile dockerfiles/devpilot-claude/Dockerfile; do
+              for df in dockerfiles/openclaw/Dockerfile dockerfiles/claude/Dockerfile; do
                 if [ -f "$df" ]; then
                   echo "  [OK] $df"
                 else
@@ -148,7 +148,7 @@ stages:
                 --build-arg NODE_IMAGE_TAG=${NODE_IMAGE_TAG} \
                 -t devpilot-claude:${} \
                 -t devpilot-claude:latest \
-                -f dockerfiles/devpilot-claude/Dockerfile \
+                -f dockerfiles/claude/Dockerfile \
                 .
               echo "  [OK] CC-Switch+Claude 镜像构建完成"
 

@@ -765,7 +765,7 @@ CI 流水线和部署脚本通过 `--build-arg` 向 Dockerfile 传递构建参�
 |----------|------|--------|-------------------|
 | `NODE_IMAGE_TAG` | Node.js 基础镜像版本 | `22.23.1-bookworm` | 两个 Dockerfile |
 | `OPENCLAW_VERSION` | OpenClaw npm 版本 | `2026.7.1-2` | `dockerfiles/openclaw/Dockerfile` |
-| `CLAUDE_CODE_VERSION` | Claude Code 版本 | `2.1.220` | `dockerfiles/devpilot-claude/Dockerfile` |
+| `CLAUDE_CODE_VERSION` | Claude Code 版本 | `2.1.220` | `dockerfiles/claude/Dockerfile` |
 
 **Dockerfile 中的 CRLF 修复**：
 
