@@ -19,7 +19,7 @@ trap 'error "部署过程中发生错误，行号: $LINENO"' ERR
 # 获取脚本所在目录的绝对路径
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # CI/CD 目录位于项目根目录下的 cicd/，向上回溯两级到项目根目录
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PROJECT_ROOT="$(get_project_root)"
 
 info "项目根目录: ${PROJECT_ROOT}"
 

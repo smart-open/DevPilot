@@ -25,7 +25,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/common.sh"
 
 # ---- 定位脚本目录 ----
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PROJECT_ROOT="$(get_project_root)"
 DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy-service.sh"
 # 容器内启动时 WORKSPACE_DIR 由调用方注入为 /workspace（与 docker-compose.yml
 # 卷挂载 ./workspace:/workspace 对齐）。宿主机直接调用可默认不设，落到

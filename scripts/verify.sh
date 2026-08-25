@@ -35,7 +35,7 @@ echo ""
 
 # ---- 切到仓库根目录 ----
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(get_project_root)"
 cd "$PROJECT_ROOT" || { echo "无法切到 $PROJECT_ROOT"; exit 1; }
 
 # ============= 阶段 0: 镜像名（避免 devpilot- 前缀重复） =============

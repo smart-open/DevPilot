@@ -26,7 +26,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../lib/common.sh"
 
 # ---- 路径定位 ----
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+PROJECT_ROOT="$(get_project_root)"
 
 # 制表符（用于 YAML 缩进检测，跨平台兼容 busybox/gnu grep）
 TAB="$(printf '\t')"

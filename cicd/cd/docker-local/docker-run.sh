@@ -21,7 +21,7 @@ trap 'error "部署过程中发生错误，行号: $LINENO"' ERR
 # 1. 定位项目根目录与 .env 文件
 # ============================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PROJECT_ROOT="$(get_project_root)"
 
 info "项目根目录: ${PROJECT_ROOT}"
 cd "${PROJECT_ROOT}"

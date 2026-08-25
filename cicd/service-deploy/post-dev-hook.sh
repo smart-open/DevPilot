@@ -23,7 +23,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/common.sh"
 
 # ---- 定位脚本目录 ----
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PROJECT_ROOT="$(get_project_root)"
 # 允许调用方（如容器内 start.sh）通过环境变量覆盖 workspace 路径，
 # 否则按宿主机布局推算（SCRIPT_DIR/../.. 的 workspace 子目录）。
 WORKSPACE_DIR="${WORKSPACE_DIR:-${PROJECT_ROOT}/workspace}"

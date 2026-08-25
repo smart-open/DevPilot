@@ -26,7 +26,7 @@ setup_error_trap
 
 # ---- 定位脚本目录 ----
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PROJECT_ROOT="$(get_project_root)"
 
 # ---- 加载 YAML 解析库 ----
 source "${SCRIPT_DIR}/lib/yaml-parser.sh"
