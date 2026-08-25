@@ -108,12 +108,12 @@ health: ## 健康检查所有服务
 ##@ 容器交互
 
 .PHONY: shell
-shell: ## 进入 Claude 容器 bash
-	$(COMPOSE) exec devpilot-claude-litellm bash
+shell: ## 进入 Claude 容器 bash（以 node 用户，对齐最小权限）
+	$(COMPOSE) exec --user node devpilot-claude-litellm bash
 
 .PHONY: claude
-claude: ## 启动 Claude Code 交互式会话
-	$(COMPOSE) exec devpilot-claude-litellm claude
+claude: ## 启动 Claude Code 交互式会话（以 node 用户）
+	$(COMPOSE) exec --user node devpilot-claude-litellm claude
 
 .PHONY: redis-cli
 redis-cli: ## 进入 Redis CLI
