@@ -112,45 +112,10 @@ read_llm_config() {
         debug "  LLM_PLATFORM 未设置，默认为 agnes"
     fi
 
-    # 根据平台读取对应配置
-    case "${LLM_PLATFORM}" in
-        agnes)
-            LLM_API_KEY=$(grep "^AGNES_API_KEY=" .env | cut -d'=' -f2)
-            LLM_BASE_URL=$(grep "^AGNES_BASE_URL=" .env | cut -d'=' -f2)
-            LLM_MODEL=$(grep "^AGNES_MODEL=" .env | cut -d'=' -f2)
-            LLM_PLATFORM_NAME="Agnes AI"
-            ;;
-        deepseek)
-            LLM_API_KEY=$(grep "^DEEPSEEK_API_KEY=" .env | cut -d'=' -f2)
-            LLM_BASE_URL=$(grep "^DEEPSEEK_BASE_URL=" .env | cut -d'=' -f2)
-            LLM_MODEL=$(grep "^DEEPSEEK_MODEL=" .env | cut -d'=' -f2)
-            LLM_PLATFORM_NAME="DeepSeek"
-            ;;
-        glm)
-            LLM_API_KEY=$(grep "^GLM_API_KEY=" .env | cut -d'=' -f2)
-            LLM_BASE_URL=$(grep "^GLM_BASE_URL=" .env | cut -d'=' -f2)
-            LLM_MODEL=$(grep "^GLM_MODEL=" .env | cut -d'=' -f2)
-            LLM_PLATFORM_NAME="GLM（智谱）"
-            ;;
-        ark)
-            LLM_API_KEY=$(grep "^ARK_API_KEY=" .env | cut -d'=' -f2)
-            LLM_BASE_URL=$(grep "^ARK_BASE_URL=" .env | cut -d'=' -f2)
-            LLM_MODEL=$(grep "^ARK_MODEL=" .env | cut -d'=' -f2)
-            LLM_PLATFORM_NAME="火山方舟（ARK）"
-            ;;
-        bailian)
-            LLM_API_KEY=$(grep "^BAILIAN_API_KEY=" .env | cut -d'=' -f2)
-            LLM_BASE_URL=$(grep "^BAILIAN_BASE_URL=" .env | cut -d'=' -f2)
-            LLM_MODEL=$(grep "^BAILIAN_MODEL=" .env | cut -d'=' -f2)
-            LLM_PLATFORM_NAME="百炼（DashScope）"
-            ;;
-        *)
-            LLM_PLATFORM_NAME="未知(${LLM_PLATFORM})"
-            LLM_API_KEY=""
-            LLM_BASE_URL=""
-            LLM_MODEL=""
-            ;;
-    esac
+    # 平台配置统一从 common.sh:configure_platform() 导出；之前反向 grep .env
+    # 此处直接调用即可（要求调用方先 load_env，否则 configure_platform 会因 API Key
+    # 为占位符而失败，但 service.sh 健康检查路径上 .env 一定已 source）。
+    configure_platform "${LLM_PLATFORM}"
 
     debug "  LLM_PLATFORM: ${LLM_PLATFORM}"
     debug "  LLM_PLATFORM_NAME: ${LLM_PLATFORM_NAME}"

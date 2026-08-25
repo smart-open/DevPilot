@@ -403,14 +403,11 @@ if [ -z "${LLM_PLATFORM}" ]; then
     LLM_PLATFORM="agnes"
     warn "LLM_PLATFORM 未设置，默认 agnes"
 fi
-case "${LLM_PLATFORM}" in
-    agnes)    PLATFORM_NAME="Agnes AI";        PFX="AGNES" ;;
-    deepseek) PLATFORM_NAME="DeepSeek";        PFX="DEEPSEEK" ;;
-    glm)      PLATFORM_NAME="GLM（智谱）";      PFX="GLM" ;;
-    ark)      PLATFORM_NAME="火山方舟（ARK）";  PFX="ARK" ;;
-    bailian)  PLATFORM_NAME="百炼";             PFX="BAILIAN" ;;
-    *)        PLATFORM_NAME="Agnes AI(默认)";   PFX="AGNES"; LLM_PLATFORM="agnes" ;;
-esac
+# 平台显示名 + 校验变量前缀；统一从 common.sh:configure_platform() 导出。
+configure_platform "${LLM_PLATFORM}"
+PLATFORM_NAME="${LLM_PLATFORM_NAME}"
+# PFX 是平台大写前缀（如 AGNES/DEEPSEEK），后续 check_env_var 用它构造变量名。
+PFX=$(echo "${LLM_PLATFORM}" | tr '[:lower:]' '[:upper:]')
 detail "当前大模型平台: ${LLM_PLATFORM} (${PLATFORM_NAME})"
 
 ENV_ERRORS=0

@@ -342,33 +342,11 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 echo -e "${CYAN}配置摘要：${NC}"
 echo -e "  大模型平台:     ${GREEN}${LLM_PLATFORM}${NC}"
-case "${LLM_PLATFORM}" in
-    agnes)
-        echo -e "  API Key:        $(echo "${AGNES_API_KEY}" | sed 's/\(.\{8\}\).*/\1.../')"
-        echo -e "  API 地址:       ${AGNES_BASE_URL}"
-        echo -e "  模型:           ${AGNES_MODEL}"
-        ;;
-    deepseek)
-        echo -e "  API Key:        $(echo "${DEEPSEEK_API_KEY}" | sed 's/\(.\{8\}\).*/\1.../')"
-        echo -e "  API 地址:       ${DEEPSEEK_BASE_URL}"
-        echo -e "  模型:           ${DEEPSEEK_MODEL}"
-        ;;
-    glm)
-        echo -e "  API Key:        $(echo "${GLM_API_KEY}" | sed 's/\(.\{8\}\).*/\1.../')"
-        echo -e "  API 地址:       ${GLM_BASE_URL}"
-        echo -e "  模型:           ${GLM_MODEL}"
-        ;;
-    ark)
-        echo -e "  API Key:        $(echo "${ARK_API_KEY}" | sed 's/\(.\{8\}\).*/\1.../')"
-        echo -e "  API 地址:       ${ARK_BASE_URL}"
-        echo -e "  模型:           ${ARK_MODEL}"
-        ;;
-    bailian)
-        echo -e "  API Key:        $(echo "${BAILIAN_API_KEY}" | sed 's/\(.\{8\}\).*/\1.../')"
-        echo -e "  API 地址:       ${BAILIAN_BASE_URL}"
-        echo -e "  模型:           ${BAILIAN_MODEL}"
-        ;;
-esac
+# 平台摘要统一从 common.sh:configure_platform() 导出的 LLM_* 变量读。
+configure_platform "${LLM_PLATFORM}"
+echo -e "  API Key:        $(echo "${LLM_API_KEY}" | sed 's/\(.\{8\}\).*/\1.../')"
+echo -e "  API 地址:       ${LLM_BASE_URL}"
+echo -e "  模型:           ${LLM_MODEL}"
 echo -e "  飞书 App ID:   ${FEISHU_APP_ID}"
 echo -e "  Redis 密码:    $(echo "${REDIS_PASSWORD}" | sed 's/./*/g')"
 echo -e "  Gateway Token: $(echo "${OPENCLAW_GATEWAY_TOKEN}" | sed 's/./*/g')"

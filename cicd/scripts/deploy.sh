@@ -200,15 +200,12 @@ case "${DEPLOY_MODE}" in
         chmod 600 "${HELM_OVERRIDE}"
         info "从 .env 生成 Helm values 覆盖文件（临时文件权限 600）..."
 
-        # 按 LLM_PLATFORM 动态生成对应平台段（此前硬编码 agnes，导致 K8s 部署仅支持 agnes）
-        case "${LLM_PLATFORM:-agnes}" in
-            agnes)    P_NAME="agnes";    P_KEY="${AGNES_API_KEY}";    P_BASE="${AGNES_BASE_URL}" ;;
-            deepseek) P_NAME="deepseek"; P_KEY="${DEEPSEEK_API_KEY}"; P_BASE="${DEEPSEEK_BASE_URL}" ;;
-            glm)      P_NAME="glm";      P_KEY="${GLM_API_KEY}";      P_BASE="${GLM_BASE_URL}" ;;
-            ark)      P_NAME="ark";      P_KEY="${ARK_API_KEY}";      P_BASE="${ARK_BASE_URL}" ;;
-            bailian)  P_NAME="bailian";  P_KEY="${BAILIAN_API_KEY}";  P_BASE="${BAILIAN_BASE_URL}" ;;
-            *)        P_NAME="agnes";    P_KEY="${AGNES_API_KEY}";    P_BASE="${AGNES_BASE_URL}" ;;
-        esac
+        # 平台解析统一调用 cicd/lib/common.sh:configure_platform()；此处
+        # 直接取 LLM_* 三件套写出 K8s 临时 values 覆盖文件。
+        configure_platform "${LLM_PLATFORM:-agnes}"
+        P_NAME="${LLM_PLATFORM}"
+        P_KEY="${LLM_API_KEY}"
+        P_BASE="${LLM_BASE_URL}"
 
         cat > "${HELM_OVERRIDE}" <<EOF
 # 自动生成的 values 覆盖文件（含密钥，权限 600，部署后自动删除，请勿手动编辑）

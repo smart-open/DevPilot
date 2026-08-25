@@ -178,45 +178,17 @@ echo -e "${CYAN}========================================${NC}"
 info "启动 devpilot-claude-litellm 容器 ..."
 
 # 根据 LLM_PLATFORM 解析当前平台配置（与 start.sh / llm-init.sh 保持一致）
-case "${LLM_PLATFORM:-agnes}" in
-    agnes)
-        ACTIVE_PROVIDER="agnes-ai"
-        ACTIVE_BASE_URL="${AGNES_BASE_URL:-https://api.agnes-ai.cn/v1}"
-        ACTIVE_API_KEY="${AGNES_API_KEY}"
-        ACTIVE_MODEL="${AGNES_MODEL:-agnes-2.5-flash}"
-        ;;
-    deepseek)
-        ACTIVE_PROVIDER="deepseek"
-        ACTIVE_BASE_URL="${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}"
-        ACTIVE_API_KEY="${DEEPSEEK_API_KEY}"
-        ACTIVE_MODEL="${DEEPSEEK_MODEL:-DeepSeek-V4-Flash}"
-        ;;
-    glm)
-        ACTIVE_PROVIDER="glm"
-        ACTIVE_BASE_URL="${GLM_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}"
-        ACTIVE_API_KEY="${GLM_API_KEY}"
-        ACTIVE_MODEL="${GLM_MODEL:-GLM-5.2}"
-        ;;
-    ark)
-        ACTIVE_PROVIDER="ark"
-        ACTIVE_BASE_URL="${ARK_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}"
-        ACTIVE_API_KEY="${ARK_API_KEY}"
-        ACTIVE_MODEL="${ARK_MODEL:-doubao-seed-2.1-turbo}"
-        ;;
-    bailian)
-        ACTIVE_PROVIDER="bailian"
-        ACTIVE_BASE_URL="${BAILIAN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}"
-        ACTIVE_API_KEY="${BAILIAN_API_KEY}"
-        ACTIVE_MODEL="${BAILIAN_MODEL:-Qwen3.7-Plus}"
-        ;;
-    *)
-        echo "[warn] 未知 LLM_PLATFORM=${LLM_PLATFORM}，回退到 agnes"
-        ACTIVE_PROVIDER="agnes-ai"
-        ACTIVE_BASE_URL="${AGNES_BASE_URL:-https://api.agnes-ai.cn/v1}"
-        ACTIVE_API_KEY="${AGNES_API_KEY}"
-        ACTIVE_MODEL="${AGNES_MODEL:-agnes-2.5-flash}"
-        ;;
-esac
+# 平台解析收敛到 cicd/lib/common.sh:configure_platform()（统一 5 平台映射）。
+# 此处 ACTIVE_PROVIDER 是 OpenClaw 视角：agnes 全名是 "agnes-ai"，其它与 LLM_PLATFORM 一致。
+configure_platform "${LLM_PLATFORM:-agnes}"
+if [ "${LLM_PLATFORM}" = "agnes" ]; then
+    ACTIVE_PROVIDER="agnes-ai"
+else
+    ACTIVE_PROVIDER="${LLM_PLATFORM}"
+fi
+ACTIVE_BASE_URL="${LLM_BASE_URL}"
+ACTIVE_API_KEY="${LLM_API_KEY}"
+ACTIVE_MODEL="${LLM_MODEL}"
 
 docker run -d \
     --name devpilot-claude-litellm \
