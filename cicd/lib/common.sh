@@ -300,17 +300,32 @@ setup_error_trap() {
 }
 
 # ============================================================
-# LLM_PLATFORM 配置（统一所有脚本的"5 平台 × 6 字段"映射）
+# ⚠️  READ ME FIRST  ⚠️   平台解析的统一入口（Single Source of Truth）
 # ============================================================
-# 取代散落在 7 个脚本里的 case/esac 重复实现（deploy.sh / init.sh /
-# service.sh / conf/claude/start.sh / conf/openclaw/init-openclaw.sh /
-# cicd/cd/docker-local/docker-run.sh / cicd/scripts/deploy.sh）。
-# 调用方只需要：
-#   source "$(get_project_root)/cicd/lib/common.sh"
-#   configure_platform "${LLM_PLATFORM:-agnes}"
-#   # 之后 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL / LLM_PLATFORM_NAME 等可见
+# DevPilot 的"大模型平台 → 字段映射"逻辑**只此一处**。任何脚本需要
+# 解析 LLM_PLATFORM，都应调用 configure_platform() 而不是再写一段
+# case/esac。
 #
-# 同时 export ANTHROPIC_* 兼容变量供 Claude Code fallback 使用。
+# 调用方用法（任何 shell 脚本，开头 source common.sh 后）：
+#   configure_platform "${LLM_PLATFORM:-agnes}"
+# 输出（export 到当前 shell）：
+#   LLM_PLATFORM        当前平台 id（agnes/deepseek/glm/ark/bailian）
+#   LLM_API_KEY         该平台真实 API Key（占位符则 configure_platform 返回 1）
+#   LLM_BASE_URL        该平台 API base（默认值兜底）
+#   LLM_MODEL           默认模型
+#   LLM_PLATFORM_NAME   中文显示名（"Agnes AI" / "百炼（DashScope）" 等）
+#   LLM_CODE_MODEL      部分平台的代码模型（如 deepseek，无则空串）
+#   LLM_CODE_PLAN_MODEL 部分平台的代码规划模型（如 ark，无则空串）
+#   ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY / ANTHROPIC_MODEL
+#                       Claude Code 通过这三个 env 连 litellm 时用
+#
+# ✅ 加新平台：**只改本文件的 _resolve_llm_platform_vars 一次**
+# ❌ 加新平台：禁止在其它脚本再加 case "${LLM_PLATFORM}" in ... esac
+#
+# 历史：commit 0a2de98 把这块从 scripts/llm-init.sh 抽出作为 SSOT。
+#       后续 commit a9c8f87 / 3c2e209 / 1b46d88 把 7 处散落副本全部
+#       收敛到本函数。
+# ============================================================
 
 # 解析当前 LLM_PLATFORM 对应的 prefix / default base_url / default model。
 # 用 bash 3 兼容写法（不用 declare -A 关联数组）。
