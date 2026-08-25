@@ -35,118 +35,10 @@ if [ -f "versions.env" ]; then
 fi
 
 # ============================================================
-# 平台配置映射（统一输出 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL）
+# 平台配置已迁移到 cicd/lib/common.sh:configure_platform() / validate_config()
+# 本脚本只做"驱动"：source common.sh → 调用 → 写 export 文件给其他进程
+# 取用。即"thin wrapper"角色，原 case/esac 重复实现已统一。
 # ============================================================
-configure_platform() {
-    local platform="$1"
-    info "初始化 ${platform} 平台配置..."
-
-    case "${platform}" in
-        agnes)
-            if [ -z "${AGNES_API_KEY}" ] || [ "${AGNES_API_KEY}" = "your-agnes-api-key" ]; then
-                error "请设置 AGNES_API_KEY"
-                return 1
-            fi
-
-            export LLM_API_KEY="${AGNES_API_KEY}"
-            export LLM_BASE_URL="${AGNES_BASE_URL:-https://api.agnes-ai.cn/v1}"
-            export LLM_MODEL="${AGNES_MODEL:-agnes-2.5-flash}"
-            export LLM_PLATFORM_NAME="Agnes AI"
-            ;;
-
-        deepseek)
-            if [ -z "${DEEPSEEK_API_KEY}" ] || [ "${DEEPSEEK_API_KEY}" = "your-deepseek-api-key" ]; then
-                error "请设置 DEEPSEEK_API_KEY"
-                return 1
-            fi
-
-            export LLM_API_KEY="${DEEPSEEK_API_KEY}"
-            export LLM_BASE_URL="${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}"
-            export LLM_MODEL="${DEEPSEEK_MODEL:-DeepSeek-V4-Flash}"
-            export LLM_CODE_MODEL="${DEEPSEEK_CODE_MODEL:-DeepSeek-V4-Flash}"
-            export LLM_PLATFORM_NAME="DeepSeek"
-            ;;
-
-        glm)
-            if [ -z "${GLM_API_KEY}" ] || [ "${GLM_API_KEY}" = "your-glm-api-key" ]; then
-                error "请设置 GLM_API_KEY"
-                return 1
-            fi
-
-            export LLM_API_KEY="${GLM_API_KEY}"
-            export LLM_BASE_URL="${GLM_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}"
-            export LLM_MODEL="${GLM_MODEL:-GLM-5.2}"
-            export LLM_PLATFORM_NAME="GLM（智谱）"
-            ;;
-
-        ark)
-            if [ -z "${ARK_API_KEY}" ] || [ "${ARK_API_KEY}" = "your-ark-api-key" ]; then
-                error "请设置 ARK_API_KEY"
-                return 1
-            fi
-
-            export LLM_API_KEY="${ARK_API_KEY}"
-            export LLM_BASE_URL="${ARK_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}"
-            export LLM_MODEL="${ARK_MODEL:-doubao-seed-2.1-turbo}"
-            export LLM_CODE_PLAN_MODEL="${ARK_CODE_PLAN_MODEL:-doubao-seed-2.1-turbo}"
-            export LLM_PLATFORM_NAME="火山方舟（ARK）"
-            ;;
-
-        bailian)
-            if [ -z "${BAILIAN_API_KEY}" ] || [ "${BAILIAN_API_KEY}" = "your-bailian-api-key" ]; then
-                error "请设置 BAILIAN_API_KEY"
-                return 1
-            fi
-
-            export LLM_API_KEY="${BAILIAN_API_KEY}"
-            export LLM_BASE_URL="${BAILIAN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}"
-            export LLM_MODEL="${BAILIAN_MODEL:-Qwen3.7-Plus}"
-            export LLM_PLATFORM_NAME="百炼（DashScope）"
-            ;;
-
-        *)
-            error "未知平台: ${platform}（支持: agnes | deepseek | glm | ark | bailian）"
-            return 1
-            ;;
-    esac
-
-    # 统一设置 ANTHROPIC 兼容变量（供 Claude Code fallback 使用）
-    export ANTHROPIC_BASE_URL="${LLM_BASE_URL}"
-    export ANTHROPIC_API_KEY="${LLM_API_KEY}"
-    export ANTHROPIC_MODEL="${LLM_MODEL}"
-
-    success "配置成功：${LLM_PLATFORM_NAME}"
-    return 0
-}
-
-# ============================================================
-# 配置验证
-# ============================================================
-validate_config() {
-    local platform="$1"
-    info "验证 ${platform} 平台配置..."
-
-    case "${platform}" in
-        agnes)
-            [ -n "${AGNES_API_KEY}" ] && [ "${AGNES_API_KEY}" != "your-agnes-api-key" ]
-            ;;
-        deepseek)
-            [ -n "${DEEPSEEK_API_KEY}" ] && [ "${DEEPSEEK_API_KEY}" != "your-deepseek-api-key" ]
-            ;;
-        glm)
-            [ -n "${GLM_API_KEY}" ] && [ "${GLM_API_KEY}" != "your-glm-api-key" ]
-            ;;
-        ark)
-            [ -n "${ARK_API_KEY}" ] && [ "${ARK_API_KEY}" != "your-ark-api-key" ]
-            ;;
-        bailian)
-            [ -n "${BAILIAN_API_KEY}" ] && [ "${BAILIAN_API_KEY}" != "your-bailian-api-key" ]
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
 
 # ============================================================
 # 显示配置摘要
@@ -161,10 +53,10 @@ print_summary() {
     echo -e "  ${CYAN}平台标识：${NC}${LLM_PLATFORM}"
     echo -e "  ${CYAN}API 地址：${NC}${LLM_BASE_URL}"
     echo -e "  ${CYAN}模型：${NC}${LLM_MODEL}"
-    if [ -n "${LLM_CODE_MODEL}" ]; then
+    if [ -n "${LLM_CODE_MODEL:-}" ]; then
         echo -e "  ${CYAN}代码模型：${NC}${LLM_CODE_MODEL}"
     fi
-    if [ -n "${LLM_CODE_PLAN_MODEL}" ]; then
+    if [ -n "${LLM_CODE_PLAN_MODEL:-}" ]; then
         echo -e "  ${CYAN}代码规划模型：${NC}${LLM_CODE_PLAN_MODEL}"
     fi
     echo -e "  ${CYAN}API Key：${NC}$(echo "${LLM_API_KEY}" | sed 's/\(.\{8\}\).*/\1.../')"

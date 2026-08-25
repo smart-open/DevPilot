@@ -6,7 +6,11 @@
 #
 # 用法:
 #   source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
+#
+# Source guard：允许重复 source（容器内 + 主机侧双重 source 时不去重）。
 # ============================================================
+[ -n "${_DEVPILOT_COMMON_LOADED:-}" ] && return 0
+export _DEVPILOT_COMMON_LOADED=1
 
 # ---- 颜色定义 ----
 export RED='\033[0;31m'
@@ -293,4 +297,151 @@ gen_password() {
 # 设置错误陷阱（显示行号）
 setup_error_trap() {
     trap 'error "执行过程中发生错误，行号: $LINENO"' ERR
+}
+
+# ============================================================
+# LLM_PLATFORM 配置（统一所有脚本的"5 平台 × 6 字段"映射）
+# ============================================================
+# 取代散落在 7 个脚本里的 case/esac 重复实现（deploy.sh / init.sh /
+# service.sh / conf/claude/start.sh / conf/openclaw/init-openclaw.sh /
+# cicd/cd/docker-local/docker-run.sh / cicd/scripts/deploy.sh）。
+# 调用方只需要：
+#   source "$(get_project_root)/cicd/lib/common.sh"
+#   configure_platform "${LLM_PLATFORM:-agnes}"
+#   # 之后 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL / LLM_PLATFORM_NAME 等可见
+#
+# 同时 export ANTHROPIC_* 兼容变量供 Claude Code fallback 使用。
+
+# 解析当前 LLM_PLATFORM 对应的 prefix / default base_url / default model。
+# 用 bash 3 兼容写法（不用 declare -A 关联数组）。
+# 用法: _resolve_llm_platform_vars <platform> prefix_var def_base_var def_model_var [extra_key_var extra_def_var]
+_resolve_llm_platform_vars() {
+    local platform="$1"
+    case "${platform}" in
+        agnes)
+            printf -v "$2" '%s' "AGNES"
+            printf -v "$3" '%s' "https://api.agnes-ai.cn/v1"
+            printf -v "$4" '%s' "agnes-2.5-flash"
+            ;;
+        deepseek)
+            printf -v "$2" '%s' "DEEPSEEK"
+            printf -v "$3" '%s' "https://api.deepseek.com/v1"
+            printf -v "$4" '%s' "DeepSeek-V4-Flash"
+            printf -v "${5:-_x}" '%s' "DEEPSEEK_CODE_MODEL"
+            printf -v "${6:-_x}" '%s' "DeepSeek-V4-Flash"
+            ;;
+        glm)
+            printf -v "$2" '%s' "GLM"
+            printf -v "$3" '%s' "https://open.bigmodel.cn/api/paas/v4"
+            printf -v "$4" '%s' "GLM-5.2"
+            ;;
+        ark)
+            printf -v "$2" '%s' "ARK"
+            printf -v "$3" '%s' "https://ark.cn-beijing.volces.com/api/v3"
+            printf -v "$4" '%s' "doubao-seed-2.1-turbo"
+            printf -v "${5:-_x}" '%s' "ARK_CODE_PLAN_MODEL"
+            printf -v "${6:-_x}" '%s' "doubao-seed-2.1-turbo"
+            ;;
+        bailian)
+            printf -v "$2" '%s' "BAILIAN"
+            printf -v "$3" '%s' "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            printf -v "$4" '%s' "Qwen3.7-Plus"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+    return 0
+}
+
+# 配置指定平台；输出统一变量 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL /
+# LLM_PLATFORM_NAME / LLM_CODE_MODEL / LLM_CODE_PLAN_MODEL，并 export
+# ANTHROPIC_* 兼容变量。返回 0 成功 / 1 失败（未知平台 / API Key 为占位符）。
+configure_platform() {
+    local platform="${1:-${LLM_PLATFORM:-agnes}}"
+    LLM_PLATFORM="${platform}"
+    export LLM_PLATFORM
+
+    local prefix def_base def_model extra_key extra_def=""
+    extra_key=""
+    if ! _resolve_llm_platform_vars "${platform}" prefix def_base def_model extra_key extra_def; then
+        error "未知大模型平台: '${platform}'（支持: agnes | deepseek | glm | ark | bailian）"
+        return 1
+    fi
+
+    local api_key="${prefix}_API_KEY"
+    local base_url="${prefix}_BASE_URL"
+    local model="${prefix}_MODEL"
+
+    # bash 3 兼容：${!var} 间接展开，bash 3 也支持
+    local _ak _au _am
+    eval "_ak=\"\${${api_key}:-}\""
+    eval "_au=\"\${${base_url}:-}\""
+    eval "_am=\"\${${model}:-}\""
+
+    if [ -z "${_ak}" ] || [[ "${_ak}" == your-* ]] || [ "${_ak}" = "change-me" ]; then
+        error "${prefix}_API_KEY 未设置或仍为占位符，请检查 .env"
+        return 1
+    fi
+
+    # 用 eval 写默认回退（bash 3 兼容）
+    eval "LLM_API_KEY=\"\${${api_key}}\""
+    if [ -n "${_au}" ]; then
+        eval "LLM_BASE_URL=\"\${${base_url}}\""
+    else
+        eval "LLM_BASE_URL=\"\${${base_url}:-${def_base}}\""
+    fi
+    if [ -n "${_am}" ]; then
+        eval "LLM_MODEL=\"\${${model}}\""
+    else
+        eval "LLM_MODEL=\"\${${model}:-${def_model}}\""
+    fi
+    export LLM_API_KEY
+    export LLM_BASE_URL
+    export LLM_MODEL
+    export LLM_PLATFORM_NAME="$(_llm_platform_display_name "${platform}")"
+
+    # 可选字段（仅部分平台有 DEEPSEEK_CODE_MODEL / ARK_CODE_PLAN_MODEL）
+    if [ -n "${extra_key}" ]; then
+        eval "_cv=\"\${${extra_key}:-${extra_def}}\""
+        LLM_CODE_MODEL="${_cv}"
+        LLM_CODE_PLAN_MODEL="${_cv}"
+    else
+        LLM_CODE_MODEL=""
+        LLM_CODE_PLAN_MODEL=""
+    fi
+    export LLM_CODE_MODEL
+    export LLM_CODE_PLAN_MODEL
+
+    # ANTHROPIC_* 兼容变量（Claude Code 通过这些环境变量连 litellm）
+    export ANTHROPIC_BASE_URL="${LLM_BASE_URL}"
+    export ANTHROPIC_API_KEY="${LLM_API_KEY}"
+    export ANTHROPIC_MODEL="${LLM_MODEL}"
+
+    return 0
+}
+
+# 检查平台 API Key 是否已真实配置（占位符视为未配置）。返回 0 / 1。
+validate_config() {
+    local platform="${1:-${LLM_PLATFORM:-agnes}}"
+    case "${platform}" in
+        agnes)    [ -n "${AGNES_API_KEY:-}" ]    && [ "${AGNES_API_KEY}" != "your-agnes-api-key" ] ;;
+        deepseek) [ -n "${DEEPSEEK_API_KEY:-}" ] && [ "${DEEPSEEK_API_KEY}" != "your-deepseek-api-key" ] ;;
+        glm)      [ -n "${GLM_API_KEY:-}" ]      && [ "${GLM_API_KEY}" != "your-glm-api-key" ] ;;
+        ark)      [ -n "${ARK_API_KEY:-}" ]      && [ "${ARK_API_KEY}" != "your-ark-api-key" ] ;;
+        bailian)  [ -n "${BAILIAN_API_KEY:-}" ]  && [ "${BAILIAN_API_KEY}" != "your-bailian-api-key" ] ;;
+        *)        return 1 ;;
+    esac
+}
+
+# 平台中文显示名（不依赖外部脚本）
+_llm_platform_display_name() {
+    case "$1" in
+        agnes)    echo "Agnes AI" ;;
+        deepseek) echo "DeepSeek" ;;
+        glm)      echo "GLM（智谱）" ;;
+        ark)      echo "火山方舟（ARK）" ;;
+        bailian)  echo "百炼（DashScope）" ;;
+        *)        echo "$1" ;;
+    esac
 }
