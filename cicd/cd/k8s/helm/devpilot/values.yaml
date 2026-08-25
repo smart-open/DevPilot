@@ -88,8 +88,8 @@ openclaw:
 ccSwitchClaude:
   # 镜像地址（需替换为实际镜像仓库地址）
   image: "devpilot-claude-litellm:latest"
-  ccSwitchVersion: "v0.21.0"
-  claudeCodeVersion: "2.1.220"
+  # 镜像内 Claude Code 版本（与 docker-compose 的 CLAUDE_CODE_VERSION 保持一致）
+  claudeCodeVersion: "2.1.241"
   # LiteLLM 代理端口（仅容器内/回环，K8s 下经 NodePort 暴露）
   webPort: 4000
   # 持久化：Claude Code 工作空间

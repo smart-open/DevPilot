@@ -18,6 +18,8 @@ data:
   # ---- OpenClaw 配置 ----
   OPENCLAW_GATEWAY_PORT: {{ .Values.openclaw.gatewayPort | quote }}
   OPENCLAW_VERSION: {{ .Values.openclaw.version | quote }}
+  # OpenClaw 跨容器访问内置 LiteLLM 代理（指向 ccSwitchClaude 服务，与 docker-compose 的 LITELLM_PROXY_URL 服务名一致）
+  LITELLM_PROXY_URL: {{ printf "http://%s:%d" (include "devpilot.ccSwitchClaude.fullname" .) .Values.ccSwitchClaude.webPort | quote }}
 
   # ---- Claude Code + 内置 LiteLLM 配置 ----
   CLAUDE_CODE_VERSION: {{ .Values.ccSwitchClaude.claudeCodeVersion | quote }}

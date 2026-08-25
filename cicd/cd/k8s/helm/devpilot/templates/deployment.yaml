@@ -273,6 +273,11 @@ spec:
                   name: {{ include "devpilot.name" . }}-secrets
                   key: REDIS_PASSWORD
               {{- end }}
+            - name: LITELLM_PROXY_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "devpilot.name" . }}-config
+                  key: LITELLM_PROXY_URL
           volumeMounts:
             - name: openclaw-config-template
               mountPath: /app/conf/openclaw.default.json
