@@ -127,7 +127,11 @@ run_cmd() {
 # 2. 列出所有可部署的服务
 # ============================================================
 list_services() {
-    local workspace_dir="${PROJECT_ROOT}/workspace"
+    # 容器内启动时 WORKSPACE_DIR 由 conf/claude/start.sh 注入为 /workspace
+    # （与 docker-compose.yml 卷挂载 ./workspace:/workspace 对齐）。
+    # 宿主机直接调用时可默认不设，落到 ${PROJECT_ROOT}/workspace。
+    # 与 cicd/service-deploy/post-dev-hook.sh:29 行为对齐（同样的 env override 模式）。
+    local workspace_dir="${WORKSPACE_DIR:-${PROJECT_ROOT}/workspace}"
     if [ ! -d "${workspace_dir}" ]; then
         warn "workspace 目录不存在: ${workspace_dir}"
         exit 0

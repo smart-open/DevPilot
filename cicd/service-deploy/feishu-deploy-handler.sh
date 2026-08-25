@@ -27,7 +27,10 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/common.sh"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy-service.sh"
-WORKSPACE_DIR="${PROJECT_ROOT}/workspace"
+# 容器内启动时 WORKSPACE_DIR 由调用方注入为 /workspace（与 docker-compose.yml
+# 卷挂载 ./workspace:/workspace 对齐）。宿主机直接调用可默认不设，落到
+# ${PROJECT_ROOT}/workspace。与 post-dev-hook.sh:29、deploy-service.sh:130 行为对齐。
+WORKSPACE_DIR="${WORKSPACE_DIR:-${PROJECT_ROOT}/workspace}"
 
 # ---- 加载 YAML 解析库 ----
 source "${SCRIPT_DIR}/lib/yaml-parser.sh"
