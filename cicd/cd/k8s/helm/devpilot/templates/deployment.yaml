@@ -378,7 +378,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-        - name: devpilot-claude
+        - name: devpilot-claude-litellm
           image: {{ .Values.ccSwitchClaude.image | quote }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           {{- if .Values.ccSwitchClaude.interactive }}
@@ -452,7 +452,7 @@ spec:
               mountPath: /workspace
             {{- end }}
             {{- if .Values.ccSwitchClaude.configPersistence.enabled }}
-            - name: devpilot-claude-data
+            - name: devpilot-claude-litellm-data
               mountPath: /home/node
             {{- end }}
           resources:
@@ -478,7 +478,7 @@ spec:
             claimName: {{ include "devpilot.ccSwitchClaude.fullname" . }}-workspace-pvc
         {{- end }}
         {{- if .Values.ccSwitchClaude.configPersistence.enabled }}
-        - name: devpilot-claude-data
+        - name: devpilot-claude-litellm-data
           persistentVolumeClaim:
             claimName: {{ include "devpilot.ccSwitchClaude.fullname" . }}-config-pvc
         {{- end }}

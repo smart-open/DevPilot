@@ -257,7 +257,7 @@ else
     docker build \
         --build-arg "CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION}" \
         --build-arg "NODE_IMAGE_TAG=${NODE_IMAGE_TAG}" \
-        -t devpilot-claude:latest \
+        -t devpilot-claude-litellm:latest \
         -f dockerfiles/claude/Dockerfile \
         .
     success "CC-Switch+Claude 镜像远程构建完成"
@@ -266,7 +266,7 @@ else
     info "清理远程旧容器 ..."
     remove_container_if_exists "devpilot-redis"
     remove_container_if_exists "devpilot-openclaw"
-    remove_container_if_exists "devpilot-claude"
+    remove_container_if_exists "devpilot-claude-litellm"
     success "远程旧容器清理完成"
 
     # 启动 Redis
@@ -304,10 +304,10 @@ else
     info "远程启动 CC-Switch+Claude 容器 ..."
     AGNES_MODEL_VALUE="${AGNES_MODEL_FLASH:-agnes-2.5-flash}"
     docker run -d \
-        --name devpilot-claude \
+        --name devpilot-claude-litellm \
         --restart unless-stopped \
         --network "${NETWORK_NAME}" \
-        --network-alias devpilot-claude \
+        --network-alias devpilot-claude-litellm \
         -e "TZ=${TZ}" \
         -e "HOME=/home/node" \
         -e "HOST=0.0.0.0" \
@@ -318,7 +318,7 @@ else
         -e "ANTHROPIC_MODEL=${AGNES_MODEL_VALUE}" \
         -e "DEVPILOT_AUTO_DEPLOY=${DEVPILOT_AUTO_DEPLOY:-false}" \
         -i -t \
-        devpilot-claude:latest
+        devpilot-claude-litellm:latest
     success "远程 CC-Switch+Claude 容器已启动"
 fi
 
@@ -335,7 +335,7 @@ wait_for_redis "devpilot-redis" "${REDIS_PASSWORD}" || true
 # OpenClaw 健康检查
 wait_for_container_http "devpilot-openclaw" "18789" "/healthz" 40 3 || true
 
-# devpilot-claude 容器健康检查（Claude Code + LiteLLM 路由）
+# devpilot-claude-litellm 容器健康检查（Claude Code + LiteLLM 路由）
 
 # ============================================================
 # 8. 输出部署结果
@@ -356,7 +356,7 @@ echo ""
 REMOTE_ADDR=$(echo "${DOCKER_HOST}" | sed 's|.*://||; s|/.*||; s|:.*||')
 echo -e "${CYAN}远程访问地址（替换为实际远程 IP）：${NC}"
 echo -e "  OpenClaw Gateway:  http://${REMOTE_ADDR}:${OPENCLAW_GATEWAY_PORT}/healthz"
-echo -e "  Claude Code:       docker exec -it devpilot-claude claude"
+echo -e "  Claude Code:       docker exec -it devpilot-claude-litellm claude"
     echo -e "  litellm 代理:      http://${REMOTE_ADDR}:4000/health/liveliness"
 echo ""
 echo -e "${CYAN}注意：${NC}"

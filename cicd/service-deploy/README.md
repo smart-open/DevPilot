@@ -631,7 +631,7 @@ CC-Switch 容器启动时会**自动配置 agnes-ai 供应商**，无需手动�
    ```
 3. 若配置文件已存在，则跳过，避免覆盖用户自定义配置
 
-> 因此，只要 `.env` 中正确填写了 `LLM_PLATFORM` 与对应平台的 `*_API_KEY` 和 `*_BASE_URL`，Claude Code 启动后即可通过 devpilot-litellm 自动配置对应供应商。无需手动操作 UI。
+> 因此，只要 `.env` 中正确填写了 `LLM_PLATFORM` 与对应平台的 `*_API_KEY` 和 `*_BASE_URL`，Claude Code 启动后即可通过 devpilot-claude-litellm 自动配置对应供应商。无需手动操作 UI。
 
 ---
 
@@ -750,7 +750,7 @@ bash cicd/service-deploy/deploy-service.sh --service-dir workspace/my-api --dry-
 
 ### Q: CC-Switch 需要手动配置 agnes-ai 供应商吗
 
-不需要。devpilot-claude 容器启动时 `start.sh` 会根据 `.env` 中的 `LLM_PLATFORM` 与对应平台凭据，将供应商配置写入 `/home/node/.claude/settings.json`。仅在配置文件已存在（用户曾自定义）时才跳过自动配置。
+不需要。devpilot-claude-litellm 容器启动时 `start.sh` 会根据 `.env` 中的 `LLM_PLATFORM` 与对应平台凭据，将供应商配置写入 `/home/node/.claude/settings.json`。仅在配置文件已存在（用户曾自定义）时才跳过自动配置。
 
 ### Q: YAML 解析器为什么不用 yq
 

@@ -311,11 +311,11 @@ OPENCLAW_VERSION=${OPENCLAW_VERSION}
 OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
 OPENCLAW_GATEWAY_PORT=${OPENCLAW_GATEWAY_PORT}
 
-# ---- 注：CC-Switch Web v0.21.0 已移除，主路由由 devpilot-litellm 承担 ----
+# ---- 注：CC-Switch Web v0.21.0 已移除，主路由由 devpilot-claude-litellm 承担 ----
 
 # ---- LiteLLM 代理配置（Claude Code 经此路由访问各平台 OpenAI 兼容端点）----
 LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-LITELLM_PROXY_URL=http://litellm:4000
+LITELLM_PROXY_URL=http://127.0.0.1:4000
 
 # ---- Claude Code 配置 ----
 CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION}

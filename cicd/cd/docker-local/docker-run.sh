@@ -85,15 +85,15 @@ docker build \
     .
 success "OpenClaw 镜像构建完成"
 
-info "构建 devpilot-claude 镜像 ..."
+info "构建 devpilot-claude-litellm 镜像 ..."
 docker build \
     --build-arg "CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION}" \
     --build-arg "NODE_IMAGE_TAG=${NODE_IMAGE_TAG}" \
-    -t devpilot-claude:latest \
-    -t "devpilot-claude:${CLAUDE_CODE_VERSION}" \
+    -t devpilot-claude-litellm:latest \
+    -t "devpilot-claude-litellm:${CLAUDE_CODE_VERSION}" \
     -f dockerfiles/claude/Dockerfile \
     .
-success "devpilot-claude 镜像构建完成"
+success "devpilot-claude-litellm 镜像构建完成"
 
 # ============================================================
 # 6. 清理旧容器（幂等：存在则删除后重建）
@@ -101,7 +101,7 @@ success "devpilot-claude 镜像构建完成"
 info "清理旧容器（如存在） ..."
 remove_container_if_exists "devpilot-redis"
 remove_container_if_exists "devpilot-openclaw"
-remove_container_if_exists "devpilot-claude"
+remove_container_if_exists "devpilot-claude-litellm"
 success "旧容器清理完成"
 
 # ============================================================
@@ -219,10 +219,10 @@ case "${LLM_PLATFORM:-agnes}" in
 esac
 
 docker run -d \
-    --name devpilot-claude \
+    --name devpilot-claude-litellm \
     --restart unless-stopped \
     --network "${NETWORK_NAME}" \
-    --network-alias devpilot-claude \
+    --network-alias devpilot-claude-litellm \
     -e "TZ=${TZ}" \
     -e "HOME=/home/node" \
     -e "LLM_PLATFORM=${LLM_PLATFORM}" \
@@ -245,9 +245,9 @@ docker run -d \
     -v "${PROJECT_ROOT}/data/devpilot-claude:/home/node" \
     -v "${PROJECT_ROOT}/logs/devpilot-claude:/logs" \
     -i -t \
-    devpilot-claude:latest
+    devpilot-claude-litellm:latest
 
-success "devpilot-claude 容器已启动"
+success "devpilot-claude-litellm 容器已启动"
 
 # ============================================================
 # 10. 输出部署结果
@@ -264,13 +264,13 @@ docker ps --filter "name=devpilot-" --format "table {{.Names}}\t{{.Status}}\t{{.
 echo ""
 echo -e "${CYAN}访问地址：${NC}"
 echo -e "  OpenClaw Gateway:  http://localhost:${OPENCLAW_GATEWAY_PORT}/healthz"
-echo -e "  Claude Code:      docker exec -it devpilot-claude claude"
+echo -e "  Claude Code:      docker exec -it devpilot-claude-litellm claude"
 echo -e "  litellm 代理:      http://localhost:4000/health/liveliness"
 echo ""
 echo -e "${CYAN}常用命令：${NC}"
 echo -e "  查看日志:     docker logs -f devpilot-openclaw"
 echo -e "  进入容器:     docker exec -it devpilot-openclaw bash"
-echo -e "  使用 Claude:  docker exec -it devpilot-claude claude"
-echo -e "  停止容器:     docker stop devpilot-redis devpilot-openclaw devpilot-claude"
-echo -e "  删除容器:     docker rm -f devpilot-redis devpilot-openclaw devpilot-claude"
+echo -e "  使用 Claude:  docker exec -it devpilot-claude-litellm claude"
+echo -e "  停止容器:     docker stop devpilot-redis devpilot-openclaw devpilot-claude-litellm"
+echo -e "  删除容器:     docker rm -f devpilot-redis devpilot-openclaw devpilot-claude-litellm"
 echo ""

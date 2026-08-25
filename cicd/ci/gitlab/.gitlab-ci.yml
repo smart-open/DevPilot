@@ -38,7 +38,7 @@ variables:
   DOCKER_TLS_CERTDIR: "/certs"
   # GitLab 镜像仓库前缀（使用内置 CI_REGISTRY_IMAGE 变量）
   IMAGE_OPENCLAW: "${CI_REGISTRY_IMAGE}/openclaw"
-  IMAGE_DEVPIOT_CLAUDE: "${CI_REGISTRY_IMAGE}/devpilot-claude"
+  IMAGE_DEVPIOT_CLAUDE: "${CI_REGISTRY_IMAGE}/devpilot-claude-litellm"
   # 镜像缓存配置
   GIT_DEPTH: "1"
 
@@ -158,11 +158,11 @@ build:openclaw:
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
     - when: manual
 
-build:devpilot-claude:
+build:devpilot-claude-litellm:
   stage: build
   needs: ["lint:shell-scripts", "lint:dockerfiles", "lint:compose", "lint:env-template"]
   script:
-    - echo "==> 构建 devpilot-claude 镜像 ..."
+    - echo "==> 构建 devpilot-claude-litellm 镜像 ..."
     - export DOCKER_BUILDKIT=1
     - |
       docker build \
@@ -174,11 +174,11 @@ build:devpilot-claude:
         -t ${IMAGE_DEVPIOT_CLAUDE}:${CI_COMMIT_SHORT_SHA} \
         -f dockerfiles/claude/Dockerfile \
         .
-    - echo "  [OK] devpilot-claude 镜像构建完成"
-    - docker save ${IMAGE_DEVPIOT_CLAUDE}:${CI_COMMIT_SHORT_SHA} -o devpilot-claude-image.tar
+    - echo "  [OK] devpilot-claude-litellm 镜像构建完成"
+    - docker save ${IMAGE_DEVPIOT_CLAUDE}:${CI_COMMIT_SHORT_SHA} -o devpilot-claude-litellm-image.tar
   artifacts:
     paths:
-      - devpilot-claude-image.tar
+      - devpilot-claude-litellm-image.tar
     expire_in: 1 hour
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -204,18 +204,18 @@ push:openclaw:
   rules:
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
 
-push:devpilot-claude:
+push:devpilot-claude-litellm:
   stage: push
-  needs: ["build:devpilot-claude"]
+  needs: ["build:devpilot-claude-litellm"]
   script:
     - echo "==> 登录 GitLab 镜像仓库 ..."
     - docker login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
-    - echo "==> 加载 devpilot-claude 镜像 ..."
-    - docker load -i devpilot-claude-image.tar
-    - echo "==> 推送 devpilot-claude 镜像 ..."
+    - echo "==> 加载 devpilot-claude-litellm 镜像 ..."
+    - docker load -i devpilot-claude-litellm-image.tar
+    - echo "==> 推送 devpilot-claude-litellm 镜像 ..."
     - docker push ${IMAGE_DEVPIOT_CLAUDE}:latest
     - docker push ${IMAGE_DEVPIOT_CLAUDE}:${CI_COMMIT_SHORT_SHA}
-    - echo "  [OK] devpilot-claude 镜像推送完成"
+    - echo "  [OK] devpilot-claude-litellm 镜像推送完成"
   rules:
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
 
@@ -248,9 +248,9 @@ scan:openclaw:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
 
-scan:devpilot-claude:
+scan:devpilot-claude-litellm:
   stage: scan
-  needs: ["build:devpilot-claude"]
+  needs: ["build:devpilot-claude-litellm"]
   image:
     name: aquasec/trivy:latest
     entrypoint: [""]
@@ -258,16 +258,16 @@ scan:devpilot-claude:
     TRIVY_NO_PROGRESS: "true"
     TRIVY_CACHE_DIR: "/trivy-cache"
   script:
-    - echo "==> Trivy 扫描 devpilot-claude 镜像 ..."
-    - docker load -i devpilot-claude-image.tar
-    - trivy image --severity CRITICAL,HIGH --exit-code 0 --format json --output trivy-devpilot-claude-report.json ${IMAGE_DEVPIOT_CLAUDE}:${CI_COMMIT_SHORT_SHA}
+    - echo "==> Trivy 扫描 devpilot-claude-litellm 镜像 ..."
+    - docker load -i devpilot-claude-litellm-image.tar
+    - trivy image --severity CRITICAL,HIGH --exit-code 0 --format json --output trivy-devpilot-claude-litellm-report.json ${IMAGE_DEVPIOT_CLAUDE}:${CI_COMMIT_SHORT_SHA}
     - trivy image --severity CRITICAL,HIGH --exit-code 0 --format table ${IMAGE_DEVPIOT_CLAUDE}:${CI_COMMIT_SHORT_SHA}
-    - echo "  [OK] devpilot-claude 镜像扫描完成"
+    - echo "  [OK] devpilot-claude-litellm 镜像扫描完成"
   artifacts:
     reports:
-      secret_detection: trivy-devpilot-claude-report.json
+      secret_detection: trivy-devpilot-claude-litellm-report.json
     paths:
-      - trivy-devpilot-claude-report.json
+      - trivy-devpilot-claude-litellm-report.json
     expire_in: 7 days
   allow_failure: true
   rules:

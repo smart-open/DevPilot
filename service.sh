@@ -12,7 +12,7 @@ set -e
 #   ./service.sh status                 # 查看容器状态
 #   ./service.sh health                 # 健康检查
 #   ./service.sh model                  # 查看当前大模型平台配置
-#   ./service.sh logs [service]         # 查看日志（service: redis/openclaw/devpilot-claude）
+#   ./service.sh logs [service]         # 查看日志（service: redis/openclaw/devpilot-claude-litellm）
 #   ./service.sh help                   # 显示帮助
 #
 # 调试模式：
@@ -224,12 +224,12 @@ verify_container_model() {
     fi
 
     # ============================================================
-    # 检查 2-5: devpilot-claude 容器（含 Claude Code + LiteLLM 路由）
+    # 检查 2-5: devpilot-claude-litellm 容器（含 Claude Code + LiteLLM 路由）
     # ============================================================
-    local cc_container="devpilot-claude"
+    local cc_container="devpilot-claude-litellm"
     if docker inspect "${cc_container}" &>/dev/null; then
 
-        # ---- 检查 2/5: devpilot-claude LLM_PLATFORM（来自 .env） ----
+        # ---- 检查 2/5: devpilot-claude-litellm LLM_PLATFORM（来自 .env） ----
         local cc_platform
         cc_platform=$(docker exec "${cc_container}" printenv LLM_PLATFORM 2>/dev/null || echo "")
         if [ "${cc_platform}" != "${LLM_PLATFORM}" ]; then
@@ -243,7 +243,7 @@ verify_container_model() {
             success "[2/5] ${cc_container} LLM_PLATFORM=${cc_platform} 与配置一致"
         fi
 
-        # ---- 检查 3/5: devpilot-claude settings.json 中 ANTHROPIC_MODEL 一致性 ----
+        # ---- 检查 3/5: devpilot-claude-litellm settings.json 中 ANTHROPIC_MODEL 一致性 ----
         # 注：旧版 CC-Switch settings.json 含 activeProvider 字段，已随 CC-Switch Web 移除废弃；
         #     现 start.sh 生成的 settings.json 为 env 块（ANTHROPIC_BASE_URL/API_KEY/MODEL），
         #     故此处改为读取 ANTHROPIC_MODEL（格式 <platform>/<model>）校验一致性。
@@ -270,7 +270,7 @@ verify_container_model() {
             error_details="${error_details}\n  [SKIP] ${cc_container} | settings ANTHROPIC_MODEL | 配置不存在"
         fi
 
-        # ---- 检查 4/5: devpilot-claude ANTHROPIC_BASE_URL = http://litellm:4000 ----
+        # ---- 检查 4/5: devpilot-claude-litellm ANTHROPIC_BASE_URL = http://127.0.0.1:4000 ----
         local anthropic_url
         anthropic_url=$(docker exec "${cc_container}" printenv ANTHROPIC_BASE_URL 2>/dev/null || echo "")
         if [ -n "${anthropic_url}" ]; then
@@ -289,7 +289,7 @@ verify_container_model() {
             error_details="${error_details}\n  [SKIP] ${cc_container} | ANTHROPIC_BASE_URL | 未设置"
         fi
 
-        # ---- 检查 5/5: devpilot-claude ANTHROPIC_MODEL = <platform>/<model> 格式 ----
+        # ---- 检查 5/5: devpilot-claude-litellm ANTHROPIC_MODEL = <platform>/<model> 格式 ----
         local anthropic_model
         anthropic_model=$(docker exec "${cc_container}" printenv ANTHROPIC_MODEL 2>/dev/null || echo "")
         if [ -n "${anthropic_model}" ]; then
@@ -340,10 +340,10 @@ verify_container_model() {
             echo "API 地址: ${LLM_BASE_URL}"
             echo "检查项:"
             echo "  [1/5] ${container_name} LLM_PLATFORM: 一致"
-            echo "  [2/5] devpilot-claude LLM_PLATFORM: 一致"
-            echo "  [3/5] devpilot-claude activeProvider: 一致"
-            echo "  [4/5] devpilot-claude ANTHROPIC_BASE_URL: 一致"
-            echo "  [5/5] devpilot-claude ANTHROPIC_MODEL: 一致"
+            echo "  [2/5] devpilot-claude-litellm LLM_PLATFORM: 一致"
+            echo "  [3/5] devpilot-claude-litellm activeProvider: 一致"
+            echo "  [4/5] devpilot-claude-litellm ANTHROPIC_BASE_URL: 一致"
+            echo "  [5/5] devpilot-claude-litellm ANTHROPIC_MODEL: 一致"
             echo "  API Key: 已设置且非占位符"
         } >> "${LOG_FILE}"
     else
@@ -449,7 +449,7 @@ do_start() {
     debug "构建的 compose 命令: ${cmd}"
 
     if [ -z "${profile_flag}" ]; then
-        info "启动全部服务（Redis + OpenClaw + devpilot-claude + devpilot-litellm）..."
+        info "启动全部服务（Redis + OpenClaw + devpilot-claude-litellm + devpilot-claude-litellm）..."
         debug "准备启动 3 个容器"
     else
         info "启动 profile=${profile_flag} 的服务..."
@@ -504,9 +504,9 @@ do_start() {
     fi
 
     if [ "${profile_name}" = "full" ] || [ "${profile_name}" = "dev" ]; then
-        debug "检查 devpilot-claude 容器 Claude Code 就绪（claude --version）"
+        debug "检查 devpilot-claude-litellm 容器 Claude Code 就绪（claude --version）"
         # Claude Code 是 CLI 而非 HTTP 服务，通过 docker exec 检测
-        docker exec devpilot-claude claude --version >/dev/null 2>&1 || warn "Claude Code 未就绪"
+        docker exec devpilot-claude-litellm claude --version >/dev/null 2>&1 || warn "Claude Code 未就绪"
     fi
 
     # 验证容器内模型配置是否生效
@@ -525,8 +525,8 @@ do_start() {
         summary_block="${summary_block}  OpenClaw:  http://localhost:${GATEWAY_PORT}\n"
     fi
     if [ "${profile_name}" = "full" ] || [ "${profile_name}" = "dev" ]; then
-        summary_block="${summary_block}  Claude Code: docker compose exec devpilot-claude claude\n"
-        summary_block="${summary_block}  litellm:    http://localhost:4000\n"
+        summary_block="${summary_block}  Claude Code: docker compose exec devpilot-claude-litellm claude\n"
+        summary_block="${summary_block}  litellm 代理: http://127.0.0.1:4000（合并于 devpilot-claude-litellm）\n"
     fi
     summary_block="${summary_block}  模型平台：${LLM_PLATFORM_NAME} (${LLM_MODEL})"
 
@@ -547,8 +547,8 @@ do_start() {
             echo "  OpenClaw: http://localhost:${GATEWAY_PORT}"
         fi
         if [ "${profile_name}" = "full" ] || [ "${profile_name}" = "dev" ]; then
-            echo "  Claude Code: docker compose exec devpilot-claude claude"
-            echo "  litellm: http://localhost:4000"
+            echo "  Claude Code: docker compose exec devpilot-claude-litellm claude"
+            echo "  litellm 代理: http://127.0.0.1:4000（合并于 devpilot-claude-litellm）"
         fi
         echo "模型切换状态: 成功"
         echo "完成!"
@@ -643,14 +643,14 @@ do_status() {
     } >> "${LOG_FILE}"
 
     docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}" \
-        devpilot-redis devpilot-openclaw devpilot-claude devpilot-litellm 2>&1 | while IFS= read -r line; do
+        devpilot-redis devpilot-openclaw devpilot-claude-litellm devpilot-claude-litellm 2>&1 | while IFS= read -r line; do
         echo "${line}"
         echo "${line}" >> "${LOG_FILE}"
     done || warn "无法获取资源使用"
 
     echo ""
     echo -e "${CYAN}端口监听:${NC}"
-    for port_info in "OpenClaw:${GATEWAY_PORT}" "devpilot-litellm:4000"; do
+    for port_info in "OpenClaw:${GATEWAY_PORT}" "devpilot-claude-litellm:4000"; do
         name="${port_info%%:*}"
         port="${port_info##*:}"
         if command -v ss &>/dev/null; then
@@ -700,18 +700,18 @@ do_health() {
         all_ok=0
     fi
 
-    echo -e "${CYAN}devpilot-litellm:${NC} "
+    echo -e "${CYAN}devpilot-claude-litellm:${NC} "
     if curl -sf "http://localhost:4000/health/liveliness" >/dev/null 2>&1; then
         success "OK"
-        echo "devpilot-litellm: OK" >> "${LOG_FILE}"
+        echo "devpilot-claude-litellm: OK" >> "${LOG_FILE}"
     else
         error "FAIL"
-        echo "devpilot-litellm: FAIL" >> "${LOG_FILE}"
+        echo "devpilot-claude-litellm: FAIL" >> "${LOG_FILE}"
         all_ok=0
     fi
 
     echo -e "${CYAN}Claude Code:${NC} "
-    if docker exec devpilot-claude claude --version 2>/dev/null; then
+    if docker exec devpilot-claude-litellm claude --version 2>/dev/null; then
         success "OK"
         echo "Claude Code: OK" >> "${LOG_FILE}"
     else
@@ -756,8 +756,8 @@ do_logs() {
         case "${service}" in
             redis)        service="redis" ;;
             openclaw|bot) service="openclaw" ;;
-            claude|claude-code|devpilot-claude) service="devpilot-claude" ;;
-            litellm)      service="litellm" ;;
+            claude|claude-code|devpilot-claude-litellm) service="devpilot-claude-litellm" ;;
+            litellm)      service="devpilot-claude-litellm" ;;
         esac
         info "查看 ${service} 日志（Ctrl+C 退出）..."
         docker compose --env-file .env logs -f --tail 100 "${service}"
@@ -787,7 +787,7 @@ show_help() {
     echo -e "  ${GREEN}status${NC}                查看容器状态和资源使用"
     echo -e "  ${GREEN}health${NC}                健康检查（Redis/OpenClaw/litellm/Claude/模型配置）"
     echo -e "  ${GREEN}model${NC}                 查看当前大模型平台配置和验证结果"
-    echo -e "  ${GREEN}logs${NC}   [service]      查看日志（redis/openclaw/devpilot-claude）"
+    echo -e "  ${GREEN}logs${NC}   [service]      查看日志（redis/openclaw/devpilot-claude-litellm）"
     echo -e "  ${GREEN}help${NC}                  显示此帮助"
     echo ""
     echo -e "${CYAN}部署模式:${NC}"

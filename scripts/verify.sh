@@ -39,7 +39,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT" || { echo "无法切到 $PROJECT_ROOT"; exit 1; }
 
 # ============= 阶段 0: 镜像名（避免 devpilot- 前缀重复） =============
-echo -e "${CYAN}[1/7] 镜像名检查（避免 devpilot-devpilot-claude 双重前缀）${NC}"
+echo -e "${CYAN}[1/7] 镜像名检查（避免 devpilot-devpilot-claude-litellm 双重前缀）${NC}"
 DUPED=$(docker images --format "{{.Repository}}" | grep -E "^devpilot-devpilot-" || true)
 if [ -z "$DUPED" ]; then
     check_pass "无 devpilot-devpilot-* 双重前缀镜像"
@@ -47,7 +47,7 @@ else
     check_fail "发现双重前缀镜像：$DUPED（说明 docker-compose.yml 还有 build 服务未设 image: 字段）"
 fi
 # 期望的核心镜像
-for img in devpilot-openclaw devpilot-claude devpilot-litellm; do
+for img in devpilot-openclaw devpilot-claude-litellm devpilot-claude-litellm; do
     if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${img}:latest$"; then
         check_pass "镜像 ${img}:latest 存在"
     else
@@ -58,7 +58,7 @@ echo ""
 
 # ============= 阶段 1: 容器层 =============
 echo -e "${CYAN}[2/7] 容器状态${NC}"
-EXPECTED=("devpilot-redis" "devpilot-openclaw" "devpilot-claude" "devpilot-litellm")
+EXPECTED=("devpilot-redis" "devpilot-openclaw" "devpilot-claude-litellm" "devpilot-claude-litellm")
 for name in "${EXPECTED[@]}"; do
     STATUS=$(docker inspect --format '{{.State.Status}}' "$name" 2>/dev/null)
     if [ "$STATUS" = "running" ]; then
@@ -70,7 +70,7 @@ done
 echo ""
 
 # ============= 阶段 2: litellm 健康 + 模型注册 =============
-echo -e "${CYAN}[3/7] devpilot-litellm 代理层${NC}"
+echo -e "${CYAN}[3/7] devpilot-claude-litellm 代理层${NC}"
 HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4000/health/liveliness 2>/dev/null)
 if [ "$HEALTH" = "200" ]; then
     check_pass "litellm /health/liveliness -> 200"
@@ -78,7 +78,7 @@ else
     check_fail "litellm /health/liveliness -> HTTP $HEALTH"
 fi
 
-MODEL_COUNT=$(docker exec devpilot-litellm cat /app/litellm_config.yaml 2>/dev/null | grep -c "^  - model_name:" || echo 0)
+MODEL_COUNT=$(docker exec devpilot-claude-litellm cat /opt/litellm/litellm_config.yaml 2>/dev/null | grep -c "^  - model_name:" || echo 0)
 if [ "$MODEL_COUNT" -ge 1 ]; then
     check_pass "litellm 注册了 $MODEL_COUNT 个模型"
 else
@@ -86,12 +86,12 @@ else
 fi
 
 # Anthropic 协议打 litellm（验证 /v1/messages 路由 + master_key 校验 + 上游转发）
-MASTER_KEY=$(docker exec devpilot-litellm env 2>/dev/null | grep -oE 'LITELLM_MASTER_KEY=[^ ]+' | head -1 | cut -d= -f2)
+MASTER_KEY=$(docker exec devpilot-claude-litellm env 2>/dev/null | grep -oE 'LITELLM_MASTER_KEY=[^ ]+' | head -1 | cut -d= -f2)
 if [ -z "$MASTER_KEY" ]; then
     check_warn "未从 litellm 容器读取到 LITELLM_MASTER_KEY（配置异常或容器未启动）"
     MASTER_KEY=""
 fi
-ACTIVE_MODEL=$(docker exec devpilot-litellm cat /app/litellm_config.yaml 2>/dev/null | grep -oE 'model_name: [^ ]+' | head -1 | awk '{print $2}')
+ACTIVE_MODEL=$(docker exec devpilot-claude-litellm cat /opt/litellm/litellm_config.yaml 2>/dev/null | grep -oE 'model_name: [^ ]+' | head -1 | awk '{print $2}')
 if [ -z "$ACTIVE_MODEL" ]; then
     ACTIVE_MODEL="agnes/agnes-2.5-flash"
 fi
@@ -112,9 +112,9 @@ echo ""
 
 # ============= 阶段 3: Claude Code settings.json =============
 echo -e "${CYAN}[4/7] Claude Code 链路${NC}"
-SETTINGS=$(docker compose exec -T devpilot-claude cat /home/node/.claude/settings.json 2>/dev/null)
-if echo "$SETTINGS" | grep -q '"ANTHROPIC_BASE_URL": "http://litellm:4000"'; then
-    check_pass "ANTHROPIC_BASE_URL 指向 litellm:4000"
+SETTINGS=$(docker compose exec -T devpilot-claude-litellm cat /home/node/.claude/settings.json 2>/dev/null)
+if echo "$SETTINGS" | grep -q '"ANTHROPIC_BASE_URL": "http://127.0.0.1:4000"'; then
+    check_pass "ANTHROPIC_BASE_URL 指向 devpilot-claude-litellm:4000"
 else
     check_fail "ANTHROPIC_BASE_URL 异常：$(echo "$SETTINGS" | grep -oE 'ANTHROPIC_BASE_URL[^,}]*' | head -1)"
 fi
@@ -131,7 +131,7 @@ else
 fi
 
 # claude --version
-CLAUDE_VER=$(docker compose exec -T devpilot-claude claude --version 2>&1 | head -1)
+CLAUDE_VER=$(docker compose exec -T devpilot-claude-litellm claude --version 2>&1 | head -1)
 if echo "$CLAUDE_VER" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
     check_pass "claude CLI 可用（$CLAUDE_VER）"
 else
@@ -198,8 +198,8 @@ else
     echo ""
     echo "排障提示："
     echo "  1. 容器日志：docker compose logs -f <service>"
-    echo "  2. litellm 配置：docker exec devpilot-litellm cat /app/litellm_config.yaml"
-    echo "  3. Claude Code 配置：docker compose exec devpilot-claude cat /home/node/.claude/settings.json"
+    echo "  2. litellm 配置：docker exec devpilot-claude-litellm cat /opt/litellm/litellm_config.yaml"
+    echo "  3. Claude Code 配置：docker compose exec devpilot-claude-litellm cat /home/node/.claude/settings.json"
     echo "  4. 详细排障手册：运维操作手册.md §13"
     exit 1
 fi

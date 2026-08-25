@@ -153,7 +153,7 @@ mask_secret() {
 # - OpenClaw Token 优先取 .env（非空 + 非占位符），否则从 data/openclaw/.openclaw/openclaw.json
 #   的 gateway.token 字段读取（容器自动生成场景）；
 # - 若 openclaw.json 读到了真实 token 且 .env 仍是占位符/缺失，会回写到 .env 以保持一致。
-# - 主路由由 devpilot-litellm 承担。
+# - 主路由由 devpilot-claude-litellm 承担。
 print_credentials() {
     local openclaw_token="" token_source=""
     local env_token tmp
@@ -198,10 +198,10 @@ print_credentials() {
     echo -e "${CYAN}飞书机器人${NC}"
     echo "  在飞书中搜索机器人（AppID 见 .env FEISHU_APP_ID），发消息即获 AI 回复"
     echo ""
-    echo -e "${CYAN}Claude Code（devpilot-claude 容器）${NC}"
-    echo "  使用方式:        docker compose exec devpilot-claude claude"
-    echo "  LLM 路由:        通过 devpilot-litellm（http://litellm:4000）"
-    echo "  配置:            ANTHROPIC_BASE_URL=http://litellm:4000（容器内 ~/.claude/settings.json）"
+    echo -e "${CYAN}Claude Code（devpilot-claude-litellm 容器）${NC}"
+    echo "  使用方式:        docker compose exec devpilot-claude-litellm claude"
+    echo "  LLM 路由:        通过 devpilot-claude-litellm（http://127.0.0.1:4000）"
+    echo "  配置:            ANTHROPIC_BASE_URL=http://127.0.0.1:4000（容器内 ~/.claude/settings.json）"
     echo ""
 
     # 同步写入日志文件（无颜色）
@@ -212,8 +212,8 @@ print_credentials() {
         echo "  Token:       ${openclaw_token}"
         echo "  Token来源:   ${token_source}"
         echo "  URL鉴权:     在地址末尾追加 #token=<token>"
-        echo "Claude Code:     docker compose exec devpilot-claude claude"
-        echo "  LLM 路由:   http://litellm:4000（devpilot-litellm 代理）"
+        echo "Claude Code:     docker compose exec devpilot-claude-litellm claude"
+        echo "  LLM 路由:   http://127.0.0.1:4000（devpilot-claude-litellm 代理）"
     } >> "${LOG_FILE}"
 }
 
@@ -488,7 +488,7 @@ docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/nul
 done
 
 # 逐容器检查
-for container in devpilot-redis devpilot-openclaw devpilot-claude devpilot-litellm; do
+for container in devpilot-redis devpilot-openclaw devpilot-claude-litellm devpilot-claude-litellm; do
     detail "检查容器: ${container}"
     if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
         local_status=$(docker inspect --format '{{.State.Status}}' "${container}" 2>/dev/null)
@@ -498,9 +498,9 @@ for container in devpilot-redis devpilot-openclaw devpilot-claude devpilot-litel
     else
         error "容器未运行: ${container}"
         detail "  最后 20 行日志:"
-        # 容器名 → compose 服务名映射：devpilot-claude 的 compose 服务名带前缀，不能简单去前缀
+        # 容器名 → compose 服务名映射：devpilot-claude-litellm 的 compose 服务名带前缀，不能简单去前缀
         case "${container}" in
-            devpilot-claude) svc_name="devpilot-claude" ;;
+            devpilot-claude-litellm) svc_name="devpilot-claude-litellm" ;;
             devpilot-*)      svc_name="${container#devpilot-}" ;;
         esac
         docker compose logs --tail 20 "${svc_name}" 2>/dev/null | head -20 | while read -r line; do
@@ -514,7 +514,7 @@ detail "检查端口绑定..."
 GATEWAY_PORT=$(grep "^OPENCLAW_GATEWAY_PORT=" .env | cut -d'=' -f2)
 REDIS_PASS=$(grep "^REDIS_PASSWORD=" .env | cut -d'=' -f2)
 
-for port_info in "OpenClaw:${GATEWAY_PORT}" "litellm:4000"; do
+for port_info in "OpenClaw:${GATEWAY_PORT}" "devpilot-claude-litellm:4000"; do
     name="${port_info%%:*}"
     port="${port_info##*:}"
     if command -v ss &>/dev/null; then
@@ -554,10 +554,10 @@ echo ""
 echo -e "${CYAN}服务地址:${NC}"
 echo "  Redis:        容器内部 :6379"
 echo "  OpenClaw:     http://localhost:${GATEWAY_PORT}"
-echo "  litellm:      http://localhost:4000（Claude Code 经 docker network 访问 litellm:4000）"
+echo "  litellm:      http://localhost:4000（Claude Code 经 docker network 访问 devpilot-claude-litellm:4000）"
 echo ""
 echo -e "${CYAN}常用命令:${NC}"
-echo "  启动 Claude Code:   docker compose exec devpilot-claude claude"
+echo "  启动 Claude Code:   docker compose exec devpilot-claude-litellm claude"
 echo "  查看日志:          docker compose logs -f"
 echo "  查看状态:          docker compose ps"
 echo "  健康检查:          make health"
@@ -566,9 +566,9 @@ echo ""
 echo -e "${CYAN}飞书机器人:${NC}"
 echo "  在飞书中搜索并添加你的机器人，发送消息即可获得 AI 回复"
 echo ""
-echo -e "${CYAN}Claude Code（经 devpilot-litellm 路由）:${NC}"
-echo "  1. 启动会话: docker compose exec devpilot-claude claude"
-echo "  2. 路由: Claude Code -> http://litellm:4000 -> 当前平台 OpenAI 兼容端点"
+echo -e "${CYAN}Claude Code（经 devpilot-claude-litellm 路由）:${NC}"
+echo "  1. 启动会话: docker compose exec devpilot-claude-litellm claude"
+echo "  2. 路由: Claude Code -> http://127.0.0.1:4000 -> 当前平台 OpenAI 兼容端点"
 echo "  3. 配置已由 start.sh 自动写入 ~/.claude/settings.json，无需手动操作"
 echo ""
 

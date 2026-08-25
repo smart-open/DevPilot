@@ -79,7 +79,7 @@ def main():
         "model_list": model_list,
     }
 
-    out = "/app/litellm_config.yaml"
+    out = "/opt/litellm/litellm_config.yaml"
     with open(out, "w", encoding="utf-8") as f:
         yaml.safe_dump(config, f, allow_unicode=True, sort_keys=False)
 

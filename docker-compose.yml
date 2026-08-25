@@ -2,7 +2,7 @@ name: devpilot
 
 # ============================================================
 # DevPilot Docker Compose 一键部署
-# 3 个容器：Redis + OpenClaw + CC-Switch/Claude Code
+# 3 个容器：Redis + OpenClaw + Claude Code（含内置 LiteLLM 代理）
 # 支持多平台大模型：Agnes AI、DeepSeek、GLM、火山方舟、百炼
 # 所有平台均走 OpenAI Chat Completion 协议
 # ============================================================
@@ -75,7 +75,7 @@ services:
       - TZ=${TZ}
       - LLM_PLATFORM=${LLM_PLATFORM}
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-      - LITELLM_PROXY_URL=${LITELLM_PROXY_URL:-http://litellm:4000}
+      - LITELLM_PROXY_URL=${LITELLM_PROXY_URL:-http://127.0.0.1:4000}
 
       # Agnes AI 平台
       - AGNES_API_KEY=${AGNES_API_KEY}
@@ -147,18 +147,19 @@ services:
           memory: 512M
 
   # ============================================================
-  # CC-Switch + Claude Code：合体容器
+  # Claude Code + LiteLLM：合体容器（合并原 devpilot-claude 与 devpilot-litellm）
   # ============================================================
-  devpilot-claude:
-    # 显式 image: 避免 docker compose 自动用 '<项目目录名>-<服务名>' 拼出 'devpilot-devpilot-claude'（多前缀）
-    image: devpilot-claude:latest
+  devpilot-claude-litellm:
+    # 显式 image: 避免 docker compose 自动用 '<项目目录名>-<服务名>' 拼出 'devpilot-devpilot-claude-litellm'（多前缀）
+    image: devpilot-claude-litellm:latest
     build:
       context: .
       dockerfile: dockerfiles/claude/Dockerfile
       args:
         CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.241}
+        LITELLM_VERSION: ${LITELLM_VERSION:-1.82.6}
         NODE_IMAGE_TAG: ${NODE_IMAGE_TAG}
-    container_name: devpilot-claude
+    container_name: devpilot-claude-litellm
     restart: unless-stopped
     profiles: ["", "full", "dev"]
     stdin_open: true
@@ -170,7 +171,7 @@ services:
       - TZ=${TZ}
       - LLM_PLATFORM=${LLM_PLATFORM}
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-      - LITELLM_PROXY_URL=${LITELLM_PROXY_URL:-http://litellm:4000}
+      - LITELLM_PROXY_URL=${LITELLM_PROXY_URL:-http://127.0.0.1:4000}
 
       # Agnes AI 平台
       - AGNES_API_KEY=${AGNES_API_KEY}
@@ -214,11 +215,18 @@ services:
       # .dockerignore 仅影响构建上下文，不影响运行时挂载；故镜像内不含 cicd，
       # 但容器运行时可通过此挂载访问宿主机 cicd/ 下的部署脚本。
       - ./cicd:/opt/devpilot/cicd:ro
+    ports:
+      # litellm 代理端口，仅监听宿主机回环：供 host 网络模式的 OpenClaw 经
+      # 127.0.0.1:4000 访问（见 OpenClaw 的 LITELLM_PROXY_URL），以及宿主机侧
+      # 脚本（service.sh/verify.sh）健康检查。容器内的 Claude Code 经同容器
+      # 127.0.0.1:4000 访问（见 start.sh）。不对宿主机之外暴露。
+      - "127.0.0.1:4000:4000"
     networks:
       - devpilot-network
     logging: *default-logging
     healthcheck:
-      # Claude Code CLI 健康检查
+      # Claude Code CLI 健康检查；litellm 由 start.sh 在容器内后台拉起，
+      # 经 127.0.0.1:4000 暴露，就绪检查已在容器内完成，无需单独探活。
       test: ["CMD", "claude", "--version"]
       interval: 30s
       timeout: 10s
@@ -227,72 +235,9 @@ services:
     deploy:
       resources:
         limits:
+          memory: 1024M
+        reservations:
           memory: 768M
-        reservations:
-          memory: 512M
-
-  # ============================================================
-  # LiteLLM 代理（复刻 CC-Switch 官方"本地路由"）
-  # 暴露 Anthropic Messages /v1/messages 端点，翻译成 OpenAI Chat Completions
-  # 转发给各平台（agnes/deepseek/glm/ark/bailian）。
-  # 由 conf/litellm/gen_config.py 在容器启动时根据 .env 各平台 API Key
-  # 生成 /app/litellm_config.yaml，Claude Code 通过 http://litellm:4000 访问。
-  # ============================================================
-  litellm:
-    # 显式 image: 避免 docker compose 自动用 '<项目目录名>-<服务名>' 拼出 'devpilot-devpilot-litellm'（多前缀）
-    image: devpilot-litellm:latest
-    build:
-      context: .
-      dockerfile: dockerfiles/litellm/Dockerfile
-      args:
-        LITELLM_VERSION: ${LITELLM_VERSION:-1.82.6}
-    container_name: devpilot-litellm
-    restart: unless-stopped
-    profiles: ["", "full", "dev"]
-    environment:
-      - TZ=${TZ}
-      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-
-      # 5 个平台凭据与端点（仅 key 有效的平台会被 gen_config.py 注册为模型）
-      - AGNES_API_KEY=${AGNES_API_KEY}
-      - AGNES_BASE_URL=${AGNES_BASE_URL}
-      - AGNES_MODEL=${AGNES_MODEL}
-
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
-      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL}
-      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL}
-
-      - GLM_API_KEY=${GLM_API_KEY}
-      - GLM_BASE_URL=${GLM_BASE_URL}
-      - GLM_MODEL=${GLM_MODEL}
-
-      - ARK_API_KEY=${ARK_API_KEY}
-      - ARK_BASE_URL=${ARK_BASE_URL}
-      - ARK_MODEL=${ARK_MODEL}
-
-      - BAILIAN_API_KEY=${BAILIAN_API_KEY}
-      - BAILIAN_BASE_URL=${BAILIAN_BASE_URL}
-      - BAILIAN_MODEL=${BAILIAN_MODEL}
-    ports:
-      # 仅监听宿主机回环：供宿主机侧脚本（service.sh/verify.sh）curl 健康检查，
-      # 但不对外暴露。master_key 必须在 .env 配置强随机值（LITELLM_MASTER_KEY）。
-      - "127.0.0.1:4000:4000"
-    networks:
-      - devpilot-network
-    logging: *default-logging
-    healthcheck:
-      # python:3.13-slim 镜像默认无 curl，用 python urllib 直接探测
-      test: ["CMD", "python3", "-c", "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=5); sys.exit(0)"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
 
 networks:
   devpilot-network:

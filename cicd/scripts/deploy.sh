@@ -286,11 +286,11 @@ health_check_docker() {
         warn "OpenClaw: 容器未运行"
     fi
 
-    # devpilot-litellm（容器内 4000；宿主机经 127.0.0.1:4000 暴露）
-    if docker ps --format '{{.Names}}' | grep -q "devpilot-litellm"; then
-        wait_for_container_http "devpilot-litellm" 4000 "/health/liveliness" 3 2 || true
+    # devpilot-claude-litellm（容器内 4000；宿主机经 127.0.0.1:4000 暴露）
+    if docker ps --format '{{.Names}}' | grep -q "devpilot-claude-litellm"; then
+        wait_for_container_http "devpilot-claude-litellm" 4000 "/health/liveliness" 3 2 || true
     else
-        warn "devpilot-litellm: 容器未运行"
+        warn "devpilot-claude-litellm: 容器未运行"
     fi
 }
 
@@ -351,11 +351,11 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 echo -e "${CYAN}访问地址：${NC}"
 echo -e "  OpenClaw Gateway:  http://localhost:${OPENCLAW_GATEWAY_PORT}/healthz"
-echo -e "  Claude Code:       docker exec -it devpilot-claude claude"
+echo -e "  Claude Code:       docker exec -it devpilot-claude-litellm claude"
   echo -e "  litellm 代理:      http://localhost:4000/health/liveliness"
 echo ""
 echo -e "${CYAN}下一步：${NC}"
-echo -e "  1. 通过 devpilot-claude 容器直接调用 Claude Code：docker compose exec devpilot-claude claude \"你谁\""
-echo -e "  2. 使用 Claude Code: docker exec -it devpilot-claude claude"
+echo -e "  1. 通过 devpilot-claude-litellm 容器直接调用 Claude Code：docker compose exec devpilot-claude-litellm claude \"你谁\""
+echo -e "  2. 使用 Claude Code: docker exec -it devpilot-claude-litellm claude"
 echo -e "  3. 在飞书中测试机器人回复"
 echo ""

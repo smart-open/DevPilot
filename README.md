@@ -41,7 +41,7 @@ git clone <repo-url> devpilot && cd devpilot
 ### 部署完成后访问
 
 - **飞书机器人**：在飞书客户端搜索并添加机器人，发送消息即可获得 AI 回复
-- **Claude Code**：运行 `docker compose exec devpilot-claude claude` 或 `make claude`
+- **Claude Code**：运行 `docker compose exec devpilot-claude-litellm claude` 或 `make claude`
 - **OpenClaw Gateway**：`http://localhost:18789/healthz`
 
 ### 一键启停（推荐使用）
@@ -75,8 +75,7 @@ vi .env  # 修改 LLM_PLATFORM=deepseek，配置 DEEPSEEK_API_KEY
 |------|------|------|------|
 | Redis | `redis:8.8.1-alpine3.23` | 6379（内部） | 缓存 + AOF/RDB 持久化 |
 | OpenClaw | `node:24.17.0` + `openclaw@2026.7.1-2` | 18789 | 飞书 AI 机器人（WebSocket 长连接）+ 多平台大模型对接 |
-| Claude Code | `node:24.17.0` + `claude-code@2.1.241` | (无宿主端口，CLI 调用) | 编程助手 + Git |
-| devpilot-litellm | `python:3.13-slim` + `litellm==1.82.6` | (容器内 4000，仅 docker network 内可达) | Anthropic ↔ OpenAI 协议翻译（CC-Switch 本地路由能力的复刻） |
+| devpilot-claude-litellm | `node:24.17.0` + `claude-code@2.1.241` + (venv)`litellm==1.82.6` | 127.0.0.1:4000（仅回环） | Claude Code 编程助手 + 内置 LiteLLM 代理（Anthropic↔OpenAI 协议翻译，复刻 CC-Switch 本地路由） |
 
 > 组件版本统一在 [`versions.env`](versions.env) 中管理，这是版本号的单一配置源。修改版本只需编辑该文件，本地脚本与 Dockerfile 会自动加载，无需多处同步。
 
@@ -85,7 +84,7 @@ vi .env  # 修改 LLM_PLATFORM=deepseek，配置 DEEPSEEK_API_KEY
 ```bash
 docker compose up -d --build            # 全部启动（默认）
 docker compose --profile bot up -d     # 仅飞书机器人（Redis + OpenClaw）
-docker compose --profile dev up -d     # 仅开发环境（CC-Switch + Claude Code）
+docker compose --profile dev up -d     # 仅开发环境（devpilot-claude-litellm）
 ```
 
 ### Kubernetes 部署（Helm）
@@ -172,7 +171,7 @@ devpilot/
 ├── conf/                       # 配置文件
 │   ├── redis/redis.conf
 │   ├── openclaw/
-│   └── devpilot-claude/
+│   └── devpilot-claude-litellm/
 ├── dockerfiles/                # Dockerfile
 ├── skills/                     # AI 研发流程技能（7 个阶段）
 │   ├── explore-SKILL.md        # 需求探索

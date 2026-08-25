@@ -135,7 +135,7 @@ stages:
 
         # 构建 CC-Switch + Claude Code 镜像
         - step: shell@1
-          name: build-devpilot-claude
+          name: build-devpilot-claude-litellm
           displayName: 构建 CC-Switch+Claude 镜像
           inputs:
             script: |
@@ -146,8 +146,8 @@ stages:
                 --build-arg=${} \
                 --build-arg CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION} \
                 --build-arg NODE_IMAGE_TAG=${NODE_IMAGE_TAG} \
-                -t devpilot-claude:${} \
-                -t devpilot-claude:latest \
+                -t devpilot-claude-litellm:${} \
+                -t devpilot-claude-litellm:latest \
                 -f dockerfiles/claude/Dockerfile \
                 .
               echo "  [OK] CC-Switch+Claude 镜像构建完成"
@@ -197,7 +197,7 @@ stages:
               echo "  [OK] OpenClaw 镜像推送完成"
 
         - step: shell@1
-          name: push-devpilot-claude
+          name: push-devpilot-claude-litellm
           displayName: 推送 CC-Switch+Claude 镜像
           dependsOn: login-registry
           inputs:
@@ -210,10 +210,10 @@ stages:
               fi
               NAMESPACE="${REGISTRY_NAMESPACE:-devpilot}"
               echo "==> 推送 CC-Switch+Claude 镜像 ..."
-              docker tag devpilot-claude:${} ${REGISTRY}/${NAMESPACE}/devpilot-claude:${}
-              docker tag devpilot-claude:latest ${REGISTRY}/${NAMESPACE}/devpilot-claude:latest
-              docker push ${REGISTRY}/${NAMESPACE}/devpilot-claude:${}
-              docker push ${REGISTRY}/${NAMESPACE}/devpilot-claude:latest
+              docker tag devpilot-claude-litellm:${} ${REGISTRY}/${NAMESPACE}/devpilot-claude-litellm:${}
+              docker tag devpilot-claude-litellm:latest ${REGISTRY}/${NAMESPACE}/devpilot-claude-litellm:latest
+              docker push ${REGISTRY}/${NAMESPACE}/devpilot-claude-litellm:${}
+              docker push ${REGISTRY}/${NAMESPACE}/devpilot-claude-litellm:latest
               echo "  [OK] CC-Switch+Claude 镜像推送完成"
 
   # ---- 阶段 4：Trivy 安全扫描 ----
@@ -254,7 +254,7 @@ stages:
               echo "  [OK] OpenClaw 镜像扫描完成"
 
         - step: shell@1
-          name: scan-devpilot-claude
+          name: scan-devpilot-claude-litellm
           displayName: 扫描 CC-Switch+Claude 镜像
           dependsOn: install-trivy
           inputs:
@@ -266,7 +266,7 @@ stages:
                 --severity CRITICAL,HIGH \
                 --exit-code 0 \
                 --format table \
-                devpilot-claude:${}
+                devpilot-claude-litellm:${}
               echo "  [OK] CC-Switch+Claude 镜像扫描完成"
 
         - step: shell@1

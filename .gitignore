@@ -29,6 +29,10 @@ Thumbs.db
 *.swo
 *~
 
+# Python 缓存
+__pycache__/
+*.pyc
+
 # IDE 内部文件
 .trae/
 .trae-html-share-packages/

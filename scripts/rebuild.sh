@@ -6,7 +6,7 @@
 #   1. 加载 versions.env + .env
 #   2. git pull 同步最新代码
 #   3. docker compose down 停掉所有容器
-#   4. 数据目录迁移（旧名 cc-switch-claude -> 新名 devpilot-claude）
+#   4. 数据目录迁移（旧名 cc-switch-claude -> 新名 devpilot-claude-litellm）
 #   5. 清理旧容器/卷/镜像残留
 #   6. （可选）清空 data/ 与 logs/
 #   7. docker compose build --no-cache 无缓存重建所有镜像
@@ -94,7 +94,7 @@ if [ -d data/cc-switch-claude ] && [ ! -d data/devpilot-claude ]; then
     mv data/cc-switch-claude data/devpilot-claude
     echo -e "  ✓ data/cc-switch-claude -> data/devpilot-claude (一次性迁移)"
 elif [ -d data/cc-switch-claude ] && [ -d data/devpilot-claude ]; then
-    echo -e "${YELLOW}  data/cc-switch-claude 与 data/devpilot-claude 同时存在，请人工处理（合并后保留 devpilot-claude）${NC}"
+    echo -e "${YELLOW}  data/cc-switch-claude 与 data/devpilot-claude 同时存在，请人工处理（合并后保留 devpilot-claude-litellm）${NC}"
 fi
 if [ -d logs/cc-switch-claude ] && [ ! -d logs/devpilot-claude ]; then
     mv logs/cc-switch-claude logs/devpilot-claude
@@ -118,8 +118,8 @@ else
 fi
 
 # ---- 7. 无缓存重建 ----
-echo -e "${GREEN}[7/8]${NC} 无缓存重建镜像（litellm / devpilot-claude / openclaw）..."
-docker compose build --no-cache litellm devpilot-claude openclaw 2>&1 | tail -15
+echo -e "${GREEN}[7/8]${NC} 无缓存重建镜像（devpilot-claude-litellm / openclaw）..."
+docker compose build --no-cache devpilot-claude-litellm openclaw 2>&1 | tail -15
 
 # ---- 8. 启动 + 验证 ----
 echo -e "${GREEN}[8/8]${NC} 启动服务..."
@@ -142,15 +142,15 @@ curl -s -o /dev/null -w "  GET /health/liveliness -> HTTP %{http_code}\n" http:/
 
 echo ""
 echo -e "${GREEN}▶ litellm 注册的模型：${NC}"
-docker exec devpilot-litellm cat /app/litellm_config.yaml 2>/dev/null | grep -E "model_name:" | sed 's/^/  /' || echo "  (无法读取)"
+docker exec devpilot-claude-litellm cat /opt/litellm/litellm_config.yaml 2>/dev/null | grep -E "model_name:" | sed 's/^/  /' || echo "  (无法读取)"
 
 echo ""
 echo -e "${GREEN}▶ Claude Code 配置：${NC}"
-docker compose exec -T devpilot-claude sh -c 'cat /home/node/.claude/settings.json 2>/dev/null' 2>/dev/null | sed 's/^/  /' || echo "  (无法读取)"
+docker compose exec -T devpilot-claude-litellm sh -c 'cat /home/node/.claude/settings.json 2>/dev/null' 2>/dev/null | sed 's/^/  /' || echo "  (无法读取)"
 
 echo ""
 echo -e "${GREEN}▶ Claude Code 版本：${NC}"
-docker compose exec -T devpilot-claude claude --version 2>/dev/null | sed 's/^/  /' || echo "  (无法读取)"
+docker compose exec -T devpilot-claude-litellm claude --version 2>/dev/null | sed 's/^/  /' || echo "  (无法读取)"
 
 echo ""
 echo -e "${CYAN}========================================${NC}"
@@ -158,8 +158,8 @@ echo -e "${GREEN}  重建完成！${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
 echo -e "  常用命令："
-echo -e "    ${YELLOW}docker compose exec devpilot-claude claude \"你是谁\"${NC}    # 端到端测试"
-echo -e "    ${YELLOW}docker compose logs -f devpilot-litellm devpilot-claude${NC}  # 实时日志"
+echo -e "    ${YELLOW}docker compose exec devpilot-claude-litellm claude \"你是谁\"${NC}    # 端到端测试"
+echo -e "    ${YELLOW}docker compose logs -f devpilot-claude-litellm${NC}  # 实时日志"
 echo -e "    ${YELLOW}make health${NC}                                              # 健康检查"
-echo -e "    ${YELLOW}docker compose restart devpilot-claude${NC}                  # 仅重启 Claude 容器"
-echo -e "    ${YELLOW}docker compose restart devpilot-litellm${NC}                 # 仅重启 litellm 代理"
+echo -e "    ${YELLOW}docker compose restart devpilot-claude-litellm${NC}                  # 仅重启 Claude 容器"
+echo -e "    ${YELLOW}docker compose restart devpilot-claude-litellm${NC}                 # 仅重启 litellm 代理"
