@@ -113,6 +113,7 @@ services:
       # Web UI HTTP 明文访问放行开关（默认 true 兼容 VM 直连；生产套反代+TLS 后设 false）
       - DEVPILLOT_INSECURE_AUTH=${DEVPILLOT_INSECURE_AUTH:-true}
       # 跨容器访问 litellm：bridge 网络内经服务名 devpilot-claude-litellm:4000
+      # （容器名仍是 devpilot-claude-litellm，不是 compose service key "claude-litellm" —— service key 只用于 `docker compose <cmd>`）
       # （覆盖上方全局 LITELLM_PROXY_URL 的 127.0.0.1 取值，后者供 Claude 容器同容器回环使用）
       - LITELLM_PROXY_URL=http://devpilot-claude-litellm:4000
       # 宿主机可达 IP（可选）：bridge 模式下用于 OpenClaw 控制 UI 的 allowedOrigins /
@@ -157,7 +158,7 @@ services:
   # ============================================================
   # Claude Code + LiteLLM：合体容器（合并原 devpilot-claude 与 devpilot-litellm）
   # ============================================================
-  devpilot-claude-litellm:
+  claude-litellm:
     # 显式 image: 避免 docker compose 自动用 '<项目目录名>-<服务名>' 拼出 'devpilot-devpilot-claude-litellm'（多前缀）
     image: devpilot-claude-litellm:latest
     build:
