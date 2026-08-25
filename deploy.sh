@@ -14,6 +14,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/cicd/lib/common.sh"
 cd "${SCRIPT_DIR}"
 
+# 设定 PROJECT_ROOT（commit a9c8f87 / e0ef249 引入 ${PROJECT_ROOT} 用法但根目录
+# deploy.sh 漏了赋值，导致 "${PROJECT_ROOT}/.env" 解析为 "/.env"，f -f 永远 false，
+# load_env 从未被触发 → configure_platform 始终看到空 env vars）。
+PROJECT_ROOT="$(get_project_root)"
+
 # ---- 日志文件设置 ----
 LOG_DIR="${SCRIPT_DIR}/logs"
 mkdir -p "${LOG_DIR}"
