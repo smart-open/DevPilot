@@ -312,7 +312,6 @@ step_end
 step_begin 2 "创建数据目录"
 
 detail "创建 data/ 目录..."
-migrate_legacy_data_dirs "${SCRIPT_DIR}"
 mkdir -p data/redis data/openclaw data/claude-litellm
 detail "  data/redis/         - Redis 持久化"
 detail "  data/openclaw/      - OpenClaw 配置"

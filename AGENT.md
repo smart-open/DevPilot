@@ -57,7 +57,7 @@
 | `docker <cmd> <container>` | exec / logs / stop / rm / inspect / stats | **container_name**（保留品牌） | `docker exec devpilot-claude-litellm bash` |
 | docker image tag | pull / rmi / tag | **image tag**（带 devpilot- 前缀） | `devpilot-claude-litellm:latest` |
 | 跨容器 DNS（URL host） | `env_file:` / URL host 部 | **container_name**（bridge 内 DNS） | `LITELLM_PROXY_URL=http://devpilot-claude-litellm:4000` |
-| 数据持久化目录 | 宿主机路径 | **路径前缀**（与服务 key 对齐，2026-08-26 起；旧 `data/devpilot-claude` 由 `migrate_legacy_data_dirs` 自动迁移） | `data/claude-litellm/` |
+| 数据持久化目录 | 宿主机路径 | **路径前缀**（与服务 key 对齐，2026-08-26 起；旧 `data/devpilot-claude` 不迁移，升级走 rebuild.sh 清空重建） | `data/claude-litellm/` |
 
 最易错的两类命令：
 

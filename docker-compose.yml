@@ -238,7 +238,7 @@ services:
     volumes:
       - ./workspace:/workspace
       # 目录名与服务 key（claude-litellm）对齐，2026-08-26 由 data/devpilot-claude
-      # 改名而来（旧目录由 create_data_dirs/rebuild.sh 自动迁移，见 cicd/lib/common.sh）
+      # 改名而来（旧环境升级不迁移，走 ./scripts/rebuild.sh 清空重建）
       - ./data/claude-litellm:/home/node
       - ./logs/claude-litellm:/logs
       # cicd 目录以只读卷挂载，供 start.sh 的自动部署钩子（post-dev-hook.sh）调用。

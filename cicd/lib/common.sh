@@ -291,32 +291,10 @@ remove_container_if_exists() {
     fi
 }
 
-# 历史数据目录迁移（幂等）：devpilot-claude -> claude-litellm
-# 2026-08-26 目录名与服务名对齐（此前为 data/devpilot-claude，沿自合并前的
-# cc-switch-claude 容器名）。旧目录存在且新目录不存在时原位改名，保留全部数据。
-migrate_legacy_data_dirs() {
-    local root="$1"
-    local pair
-    for pair in "data/devpilot-claude:data/claude-litellm" \
-                "logs/devpilot-claude:logs/claude-litellm" \
-                "data/cc-switch-claude:data/claude-litellm" \
-                "logs/cc-switch-claude:logs/claude-litellm"; do
-        local old="${root}/${pair%%:*}"
-        local new="${root}/${pair##*:}"
-        if [ -d "${old}" ] && [ ! -d "${new}" ]; then
-            mv "${old}" "${new}"
-            echo "已迁移: ${old} -> ${new}"
-        elif [ -d "${old}" ] && [ -d "${new}" ]; then
-            echo "警告: ${old} 与 ${new} 同时存在，请人工合并后删除旧目录" >&2
-        fi
-    done
-}
-
 # 创建项目数据目录（幂等）
 # 用法: create_data_dirs "${PROJECT_ROOT}"
 create_data_dirs() {
     local root="$1"
-    migrate_legacy_data_dirs "${root}"
     mkdir -p "${root}/data/redis" "${root}/data/openclaw" "${root}/data/claude-litellm"
     mkdir -p "${root}/logs/redis" "${root}/logs/openclaw" "${root}/logs/claude-litellm"
     mkdir -p "${root}/workspace"

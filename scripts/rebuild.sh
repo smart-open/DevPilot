@@ -6,15 +6,14 @@
 #   1. 加载 versions.env + .env
 #   2. git pull 同步最新代码
 #   3. docker compose down 停掉所有容器
-#   4. 数据目录迁移（旧名 cc-switch-claude -> 新名 devpilot-claude-litellm）
-#   5. 清理旧容器/卷/镜像残留
-#   6. （可选）清空 data/ 与 logs/
-#   7. docker compose build --no-cache 无缓存重建所有镜像
-#   8. docker compose up -d 启动
-#   9. 端到端验证（litellm 健康 / 模型注册 / Claude Code 配置）
+#   4. 清理旧容器/卷/镜像残留
+#   5. （可选）清空 data/ 与 logs/
+#   6. docker compose build --no-cache 无缓存重建所有镜像
+#   7. docker compose up -d 启动
+#   8. 端到端验证（litellm 健康 / 模型注册 / Claude Code 配置）
 #
 # 保留：项目根目录的 .env（API Key / 密码不会丢）
-# 清掉：data/ 下的 openclaw 配置、cc-switch-claude 数据、redis dump 等
+# 清掉：data/ 下的 openclaw 配置、Claude Code 设置、redis dump 等
 #       logs/ 下的所有容器日志
 # ============================================================
 
@@ -88,32 +87,8 @@ fi
 echo -e "${GREEN}[4/8]${NC} 停止并删除现有容器 + 网络..."
 docker compose down -v 2>&1 | tail -5 || true
 
-# ---- 5. 数据目录迁移 + 残留清理 ----
-echo -e "${GREEN}[5/8]${NC} 数据目录迁移与残留清理..."
-# devpilot-claude -> claude-litellm（2026-08-26 目录名与服务名对齐）
-if [ -d data/devpilot-claude ] && [ ! -d data/claude-litellm ]; then
-    mv data/devpilot-claude data/claude-litellm
-    echo -e "  ✓ data/devpilot-claude -> data/claude-litellm (一次性迁移)"
-elif [ -d data/devpilot-claude ] && [ -d data/claude-litellm ]; then
-    echo -e "${YELLOW}  data/devpilot-claude 与 data/claude-litellm 同时存在，请人工处理（合并后保留 claude-litellm）${NC}"
-fi
-if [ -d logs/devpilot-claude ] && [ ! -d logs/claude-litellm ]; then
-    mv logs/devpilot-claude logs/claude-litellm
-    echo -e "  ✓ logs/devpilot-claude -> logs/claude-litellm (一次性迁移)"
-elif [ -d logs/devpilot-claude ] && [ -d logs/claude-litellm ]; then
-    echo -e "${YELLOW}  logs/devpilot-claude 与 logs/claude-litellm 同时存在，请人工处理${NC}"
-fi
-# 上上一代目录 cc-switch-claude -> claude-litellm（链式迁移兜底）
-if [ -d data/cc-switch-claude ] && [ ! -d data/claude-litellm ]; then
-    mv data/cc-switch-claude data/claude-litellm
-    echo -e "  ✓ data/cc-switch-claude -> data/claude-litellm (历史一次性迁移)"
-elif [ -d data/cc-switch-claude ] && [ -d data/claude-litellm ]; then
-    echo -e "${YELLOW}  data/cc-switch-claude 与 data/claude-litellm 同时存在，请人工处理（合并后保留 claude-litellm）${NC}"
-fi
-if [ -d logs/cc-switch-claude ] && [ ! -d logs/claude-litellm ]; then
-    mv logs/cc-switch-claude logs/claude-litellm
-    echo -e "  ✓ logs/cc-switch-claude -> logs/claude-litellm"
-fi
+# ---- 5. 残留清理 ----
+echo -e "${GREEN}[5/8]${NC} 清理旧容器卷/镜像残留..."
 # 清理旧容器卷
 docker volume ls -q 2>/dev/null | grep -E "cc-switch-claude" | xargs -r docker volume rm 2>/dev/null || true
 # 清理旧镜像

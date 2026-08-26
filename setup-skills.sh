@@ -7,8 +7,7 @@ set -e
 #       data/openclaw/.openclaw/skills/（OpenClaw 容器挂载点）
 # 格式：OpenClaw 技能规范 = 「目录 + SKILL.md + YAML frontmatter
 #       （name/description）」。平铺的 *-SKILL.md 文件 OpenClaw
-#       不会发现——2026-08-26 前的安装方式即为该错误格式，
-#       导致全部技能（含 /deploy 路由）从未被加载。
+#       不会发现，本脚本安装前会校验 frontmatter。
 # 用法: ./setup-skills.sh
 # 依赖：cicd/lib/common.sh（公共函数库）
 # ============================================================
@@ -64,21 +63,7 @@ for name in "${SKILL_NAMES[@]}"; do
 done
 
 # ============================================================
-# 3. 清理历史遗留的平铺格式文件（OpenClaw 无法发现，留着误导排障）
-# ============================================================
-LEGACY=0
-for f in "${TARGET_DIR}"/*-SKILL.md; do
-    [ -f "$f" ] || continue
-    rm -f "$f"
-    warn "已清理旧格式文件: $(basename "$f")"
-    LEGACY=$((LEGACY + 1))
-done
-if [ "${LEGACY}" -gt 0 ]; then
-    info "共清理 ${LEGACY} 个旧格式平铺文件"
-fi
-
-# ============================================================
-# 4. 打印摘要
+# 3. 打印摘要
 # ============================================================
 echo ""
 print_separator
