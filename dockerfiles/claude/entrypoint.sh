@@ -4,7 +4,7 @@ set -e
 # ============================================================
 # DevPilot Claude Code + LiteLLM 合体容器入口脚本
 # 问题背景：
-#   docker-compose.yml 将宿主机 ./data/devpilot-claude bind mount 到
+#   docker-compose.yml 将宿主机 ./data/claude-litellm bind mount 到
 #   /home/node（用于持久化 Claude Code 配置）。该挂载点会覆盖镜像层里
 #   构建期 chown 的结果，在容器内对 node(uid 1000) 不可写，导致 start.sh
 #   执行 `mkdir -p $HOME/.claude` 报 Permission denied 并因 set -e 退出。

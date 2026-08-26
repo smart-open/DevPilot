@@ -16,7 +16,7 @@ backups/
 workspace/*
 !workspace/.gitkeep
 
-# devpilot-claude 运行时配置
+# claude-litellm 运行时配置
 conf/claude/runtime/
 
 # Helm 临时文件

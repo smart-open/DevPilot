@@ -90,15 +90,29 @@ docker compose down -v 2>&1 | tail -5 || true
 
 # ---- 5. 数据目录迁移 + 残留清理 ----
 echo -e "${GREEN}[5/8]${NC} 数据目录迁移与残留清理..."
-if [ -d data/cc-switch-claude ] && [ ! -d data/devpilot-claude ]; then
-    mv data/cc-switch-claude data/devpilot-claude
-    echo -e "  ✓ data/cc-switch-claude -> data/devpilot-claude (一次性迁移)"
-elif [ -d data/cc-switch-claude ] && [ -d data/devpilot-claude ]; then
-    echo -e "${YELLOW}  data/cc-switch-claude 与 data/devpilot-claude 同时存在，请人工处理（合并后保留 devpilot-claude-litellm）${NC}"
+# devpilot-claude -> claude-litellm（2026-08-26 目录名与服务名对齐）
+if [ -d data/devpilot-claude ] && [ ! -d data/claude-litellm ]; then
+    mv data/devpilot-claude data/claude-litellm
+    echo -e "  ✓ data/devpilot-claude -> data/claude-litellm (一次性迁移)"
+elif [ -d data/devpilot-claude ] && [ -d data/claude-litellm ]; then
+    echo -e "${YELLOW}  data/devpilot-claude 与 data/claude-litellm 同时存在，请人工处理（合并后保留 claude-litellm）${NC}"
 fi
-if [ -d logs/cc-switch-claude ] && [ ! -d logs/devpilot-claude ]; then
-    mv logs/cc-switch-claude logs/devpilot-claude
-    echo -e "  ✓ logs/cc-switch-claude -> logs/devpilot-claude"
+if [ -d logs/devpilot-claude ] && [ ! -d logs/claude-litellm ]; then
+    mv logs/devpilot-claude logs/claude-litellm
+    echo -e "  ✓ logs/devpilot-claude -> logs/claude-litellm (一次性迁移)"
+elif [ -d logs/devpilot-claude ] && [ -d logs/claude-litellm ]; then
+    echo -e "${YELLOW}  logs/devpilot-claude 与 logs/claude-litellm 同时存在，请人工处理${NC}"
+fi
+# 上上一代目录 cc-switch-claude -> claude-litellm（链式迁移兜底）
+if [ -d data/cc-switch-claude ] && [ ! -d data/claude-litellm ]; then
+    mv data/cc-switch-claude data/claude-litellm
+    echo -e "  ✓ data/cc-switch-claude -> data/claude-litellm (历史一次性迁移)"
+elif [ -d data/cc-switch-claude ] && [ -d data/claude-litellm ]; then
+    echo -e "${YELLOW}  data/cc-switch-claude 与 data/claude-litellm 同时存在，请人工处理（合并后保留 claude-litellm）${NC}"
+fi
+if [ -d logs/cc-switch-claude ] && [ ! -d logs/claude-litellm ]; then
+    mv logs/cc-switch-claude logs/claude-litellm
+    echo -e "  ✓ logs/cc-switch-claude -> logs/claude-litellm"
 fi
 # 清理旧容器卷
 docker volume ls -q 2>/dev/null | grep -E "cc-switch-claude" | xargs -r docker volume rm 2>/dev/null || true

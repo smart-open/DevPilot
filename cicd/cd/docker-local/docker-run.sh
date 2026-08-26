@@ -214,8 +214,8 @@ docker run -d \
     -e "DEVPILOT_AUTO_DEPLOY=${DEVPILOT_AUTO_DEPLOY:-false}" \
     -e "ALLOW_HTTP_BASIC_OVER_HTTP=1" \
     -v "${PROJECT_ROOT}/workspace:/workspace" \
-    -v "${PROJECT_ROOT}/data/devpilot-claude:/home/node" \
-    -v "${PROJECT_ROOT}/logs/devpilot-claude:/logs" \
+    -v "${PROJECT_ROOT}/data/claude-litellm:/home/node" \
+    -v "${PROJECT_ROOT}/logs/claude-litellm:/logs" \
     -i -t \
     devpilot-claude-litellm:latest
 

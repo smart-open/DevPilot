@@ -214,8 +214,8 @@ if [ "${DEPLOY_MODE}" = "compose" ]; then
     info "在远程主机创建数据目录 ..."
     # 使用一个临时容器创建目录（挂载宿主机路径）
     docker run --rm -v /:/host alpine sh -c "
-        mkdir -p /host/data/redis /host/data/openclaw /host/data/devpilot-claude
-        mkdir -p /host/logs/redis /host/logs/openclaw /host/logs/devpilot-claude
+        mkdir -p /host/data/redis /host/data/openclaw /host/data/claude-litellm
+        mkdir -p /host/logs/redis /host/logs/openclaw /host/logs/claude-litellm
         mkdir -p /host/workspace
         touch /host/workspace/.gitkeep
     " 2>/dev/null || warn "远程目录创建可能需要手动执行（权限问题）"

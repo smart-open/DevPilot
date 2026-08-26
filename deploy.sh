@@ -312,16 +312,17 @@ step_end
 step_begin 2 "创建数据目录"
 
 detail "创建 data/ 目录..."
-mkdir -p data/redis data/openclaw data/devpilot-claude
+migrate_legacy_data_dirs "${SCRIPT_DIR}"
+mkdir -p data/redis data/openclaw data/claude-litellm
 detail "  data/redis/         - Redis 持久化"
 detail "  data/openclaw/      - OpenClaw 配置"
-detail "  data/devpilot-claude/ - Claude Code 数据"
+detail "  data/claude-litellm/ - Claude Code 数据"
 
 detail "创建 logs/ 目录..."
-mkdir -p logs/redis logs/openclaw logs/devpilot-claude
+mkdir -p logs/redis logs/openclaw logs/claude-litellm
 detail "  logs/redis/          - Redis 日志"
 detail "  logs/openclaw/       - OpenClaw 日志"
-detail "  logs/devpilot-claude/ - Claude Code 日志"
+detail "  logs/claude-litellm/ - Claude Code 日志"
 
 detail "创建 workspace/ 目录..."
 mkdir -p workspace

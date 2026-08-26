@@ -332,7 +332,7 @@ verify_container_model() {
         echo ""
         warn "修复建议："
         echo -e "  1. 容器环境变量不一致 -> 运行 ${GREEN}./service.sh restart${NC} 重建容器"
-        echo -e "  2. 配置不一致 -> 删除 ${GREEN}data/devpilot-claude/.claude/settings.json${NC} 后重启"
+        echo -e "  2. 配置不一致 -> 删除 ${GREEN}data/claude-litellm/.claude/settings.json${NC} 后重启"
         echo -e "  3. API Key 为占位符 -> 编辑 ${GREEN}.env${NC} 设置真实 API Key"
         echo ""
         {
@@ -348,7 +348,7 @@ verify_container_model() {
             echo ""
             echo "修复建议:"
             echo "  1. 容器环境变量不一致 -> 运行 ./service.sh restart 重建容器"
-            echo "  2. 配置不一致 -> 删除 data/devpilot-claude/.claude/settings.json 后重启"
+            echo "  2. 配置不一致 -> 删除 data/claude-litellm/.claude/settings.json 后重启"
             echo "  3. API Key 为占位符 -> 编辑 .env 设置真实 API Key"
         } >> "${LOG_FILE}"
     fi

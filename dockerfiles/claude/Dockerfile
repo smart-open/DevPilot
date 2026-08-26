@@ -81,9 +81,9 @@ RUN sed -i 's/\r$//' /usr/local/bin/start.sh /opt/litellm/gen_config.py /usr/loc
     && chmod +x /usr/local/bin/start.sh /usr/local/bin/entrypoint.sh /usr/local/lib/devpilot-common.sh
 
 # ---- 以 root 作为默认用户，由 entrypoint 修正挂载点属主后降权回 node（最小权限）----
-# 原因：compose 将宿主机 ./data/devpilot-claude bind mount 到 /home/node，覆盖构建期 chown 结果，
+# 原因：compose 将宿主机 ./data/claude-litellm bind mount 到 /home/node，覆盖构建期 chown 结果，
 #       该挂载点在容器内对 node(uid 1000) 不可写。故出口脚本先以 root chown，再用 runuser 降权。
-# 注意：宿主机 ./workspace 与 ./data/devpilot-claude 挂载目录需在容器内对 node 用户(uid 1000)可写；
+# 注意：宿主机 ./workspace 与 ./data/claude-litellm 挂载目录需在容器内对 node 用户(uid 1000)可写；
 #       由 entrypoint 的 chown 在运行时修正属主，无需额外 init container。
 # （不再在此设置 USER node，否则 entrypoint 无 root 权限无法 chown）
 
