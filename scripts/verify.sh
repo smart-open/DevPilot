@@ -84,8 +84,10 @@ else
     check_fail "litellm /health/liveliness -> HTTP $HEALTH"
 fi
 
+# PyYAML safe_dump 生成的序列项顶格（列 0），旧模式 /^  - model_name:/ 要求
+# 2 个前导空格永远匹配不到 → 恒报 0（2026-08-26 实测，模型实际已注册且可对话）
 MODEL_COUNT=$(docker exec devpilot-claude-litellm cat /opt/litellm/litellm_config.yaml 2>/dev/null \
-    | awk '/^  - model_name:/{c++} END{print c+0}')
+    | awk '/^[[:space:]]*- model_name:/{c++} END{print c+0}')
 MODEL_COUNT="${MODEL_COUNT:-0}"
 if [ "$MODEL_COUNT" -ge 1 ] 2>/dev/null; then
     check_pass "litellm 注册了 ${MODEL_COUNT} 个模型"
@@ -170,18 +172,22 @@ else
     check_warn "飞书插件未安装（重部署后可能需 openclaw plugins install feishu）"
 fi
 
-# 飞书频道活跃度：双判定（飞书子进程在跑 + OpenClaw 网关 /v1/channels API 200）。
-# 原 `openclaw channels list | grep active` 在 2026.7.x 输出不含 active/running 字段。
-FEISHU_PROC=$(docker exec devpilot-openclaw sh -c "ps -ef 2>/dev/null | grep -iE 'feishu|lark' | grep -v grep | wc -l" 2>/dev/null || echo 0)
-FEISHU_API=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:18789/v1/channels 2>/dev/null || echo "000")
-FEISHU_PROC=${FEISHU_PROC//[!0-9]/}
-FEISHU_PROC="${FEISHU_PROC:-0}"
-if [ "$FEISHU_PROC" -ge 1 ] 2>/dev/null && [ "$FEISHU_API" = "200" ]; then
-    check_pass "飞书频道活跃（子进程 + 网关 API HTTP $FEISHU_API）"
-elif [ "$FEISHU_PROC" -ge 1 ] 2>/dev/null; then
-    check_warn "飞书子进程在跑但网关 /v1/channels API 异常（HTTP $FEISHU_API）"
+# 飞书频道活跃度：openclaw status --deep 的 Channels 状态表（Feishu | ON | OK）。
+# 飞书插件以 WebSocket 长连接跑在 gateway Node 进程内，没有独立子进程，
+# `ps -ef | grep feishu` 恒为 0（2026-08-26 实测误报）；更早的
+# `openclaw channels list | grep active` 在 2026.7.x 输出也不含 active 字段。
+FEISHU_ROW=$(docker exec devpilot-openclaw openclaw status --deep 2>/dev/null \
+    | sed 's/\x1b\[[0-9;]*m//g' | grep -i feishu | head -1 | tr -d '│|' | tr -s ' ')
+if [ -n "$FEISHU_ROW" ] && echo "$FEISHU_ROW" | grep -qiE '\bON\b' && echo "$FEISHU_ROW" | grep -qiE '\bOK\b'; then
+    check_pass "飞书频道活跃（status --deep: $(echo "$FEISHU_ROW" | xargs)）"
 else
-    check_warn "飞书频道未活跃（feishu 子进程数=$FEISHU_PROC，需检查 OPENCLAW 配置 / FEISHU_APP_ID/SECRET）"
+    # 兜底：openclaw health --json（官方健康快照，含每频道探测摘要）
+    FEISHU_HEALTH=$(docker exec devpilot-openclaw openclaw health --json 2>/dev/null || true)
+    if echo "$FEISHU_HEALTH" | grep -q '"feishu"' && echo "$FEISHU_HEALTH" | grep -qE '"(connected|running)": *true'; then
+        check_pass "飞书频道活跃（health --json: connected/running）"
+    else
+        check_warn "飞书频道未活跃（status --deep 行：'${FEISHU_ROW:-无}'；health --json 无 connected/running），需检查 OPENCLAW 配置 / FEISHU_APP_ID/SECRET"
+    fi
 fi
 echo ""
 

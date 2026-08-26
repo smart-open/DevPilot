@@ -163,13 +163,13 @@ docker exec devpilot-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" ping'
 | 不要把 `OPENCLAW_GATEWAY_TOKEN` 留为 `change-me-to-secure-token` | init-openclaw.sh 会自动生成；占位符运行可视但安全风险大 |
 | 不要给 `common.sh` 的 `_DEVPILOT_COMMON_LOADED` 加 `export` | guard 变量泄漏进子进程（如 `bash deploy-service.sh`），子脚本 source 公共库被短路 → `setup_error_trap: command not found`（2026-08-26 已修复，防回归） |
 | 部署脚本不要自行拼接 `${PROJECT_ROOT}/workspace` | 统一用 `common.sh:resolve_workspace_dir()`（WORKSPACE_DIR env > 容器 `/workspace` > PROJECT_ROOT/workspace），否则容器内 `docker exec` 直调会回退到不存在的 `/opt/devpilot/workspace` |
+| 不要用 `ps` 数子进程判定 OpenClaw 频道活跃度 | 频道插件（如飞书）以 WS 长连接跑在 gateway Node 进程内，无独立子进程，`ps -ef \| grep feishu` 恒为 0；用 `openclaw status --deep` 的 Channels 表（Feishu \| ON \| OK），兜底 `openclaw health --json`（2026-08-26 已修复 verify.sh，防回归） |
+| 不要按固定缩进匹配 PyYAML 生成的 YAML 列表项 | `yaml.safe_dump` 的序列项顶格（列 0），`/^  - model_name:/` 类模式恒不匹配；用 `/^[[:space:]]*- /` 容忍任意缩进（2026-08-26 已修复 verify.sh，防回归） |
 
 ---
 
 ## 6. 已知遗留与待办
 
-- **verify.sh 在 `litellm 模型注册数` 上有 bash 写法 bug**（`grep -c || echo 0` 导致 MODEL_COUNT 含换行，触发 `integer expression expected`），不影响实际服务（OpenClaw 已成功 call 上游证明 litellm 注册有效）。修法见 `运维操作手册.md` §13 与本卡 §9 排障。
-- **verify.sh 在 OpenClaw gateway 状态探测命令上选错**（`openclaw gateway status` 返回 systemd-style 字符串，非真实探活），实际服务正常（容器日志 `gateway ready` + 飞书 WS 已 ready）。
 - **OpenClaw `gateway.controlUi.allowInsecureAuth=true` 在容器内被显式声明以绕过 HTTP 明文认证**——生产环境套反向代理 + TLS 后应设 `DEVPILLOT_INSECURE_AUTH=false`。
 - **OpenClaw gateway 存在堆增长倾向（2026-08-26 实测）**：处理长 SSE 流式回复后 V8 堆可增至 ~250MB，曾撞默认堆上限崩溃（`JavaScript heap out of memory`，非 137 OOM）。已缓解：compose 配 `NODE_OPTIONS=--max-old-space-size=512` + 容器限制 1024M。若长会话下仍复现，按运维手册 §8.1.4/§13.7 同步上调堆与容器限制；根治需盯上游版本。
 
