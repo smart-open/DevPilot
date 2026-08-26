@@ -212,6 +212,11 @@ services:
 
       # 服务自动部署
       - DEVPILOT_AUTO_DEPLOY=${DEVPILOT_AUTO_DEPLOY}
+      # 服务部署脚本（cicd/service-deploy/*.sh）的 workspace 定位锚点。
+      # 容器内挂载点固定为 /workspace（见上方 volumes）；声明为环境变量后，
+      # docker exec 直调部署脚本也能正确解析（不依赖 start.sh 注入）。
+      # 脚本侧另有 /.dockerenv 自动检测兜底（common.sh:resolve_workspace_dir）。
+      - WORKSPACE_DIR=/workspace
 
       # 允许在 HTTP（非 TLS）下暴露 Basic/Bearer 凭证
       # 容器仅运行在内部 bridge 网络，由宿主机反向代理终止 TLS 后对外暴露

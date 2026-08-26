@@ -127,11 +127,11 @@ run_cmd() {
 # 2. 列出所有可部署的服务
 # ============================================================
 list_services() {
-    # 容器内启动时 WORKSPACE_DIR 由 conf/claude/start.sh 注入为 /workspace
-    # （与 docker-compose.yml 卷挂载 ./workspace:/workspace 对齐）。
-    # 宿主机直接调用时可默认不设，落到 ${PROJECT_ROOT}/workspace。
-    # 与 cicd/service-deploy/post-dev-hook.sh:29 行为对齐（同样的 env override 模式）。
-    local workspace_dir="${WORKSPACE_DIR:-${PROJECT_ROOT}/workspace}"
+    # workspace 定位统一走 common.sh:resolve_workspace_dir()：
+    # WORKSPACE_DIR 环境变量 > 容器内挂载点 /workspace > ${PROJECT_ROOT}/workspace。
+    # 容器内 docker exec 直调本脚本时无需 start.sh 注入即可正确解析。
+    local workspace_dir
+    workspace_dir="$(resolve_workspace_dir)"
     if [ ! -d "${workspace_dir}" ]; then
         warn "workspace 目录不存在: ${workspace_dir}"
         exit 0
@@ -173,6 +173,15 @@ list_services() {
 if [ "${LIST_ONLY}" = "true" ]; then
     list_services
     exit 0
+fi
+
+# ---- 前置检查：构建/部署/清理均需 docker CLI ----
+# devpilot 容器内未挂载 docker.sock、也无 docker CLI，--list 等纯查询命令
+# 可在容器内执行；实际构建/部署请在宿主机执行（见用户操作手册 4.7）。
+if ! command -v docker &>/dev/null; then
+    error "当前环境无 docker CLI，无法构建/部署（--list 等查询命令不受影响）"
+    echo "  请在宿主机执行: ./cicd/service-deploy/deploy-service.sh --service-dir workspace/<服务名>"
+    exit 1
 fi
 
 # ============================================================

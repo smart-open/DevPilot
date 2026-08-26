@@ -7,10 +7,14 @@
 # 用法:
 #   source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 #
-# Source guard：允许重复 source（容器内 + 主机侧双重 source 时不去重）。
+# Source guard：同一 shell 进程内重复 source 时跳过重定义。
+# ⚠️ 此变量禁止 export：一旦泄漏进子进程（如 feishu-deploy-handler.sh
+#    以 `bash deploy-service.sh` 启动子进程），子进程 source 本文件会被
+#    guard 短路，所有函数未定义——曾导致 "setup_error_trap: command not
+#    found"（deploy-service.sh line 25）。
 # ============================================================
 [ -n "${_DEVPILOT_COMMON_LOADED:-}" ] && return 0
-export _DEVPILOT_COMMON_LOADED=1
+_DEVPILOT_COMMON_LOADED=1
 
 # ---- 颜色定义 ----
 export RED='\033[0;31m'
@@ -61,6 +65,24 @@ get_project_root() {
     done
     # 回退：假设标准目录结构
     echo "$(cd "${script_dir}/../.." && pwd)"
+}
+
+# 解析服务部署用的 workspace 目录（deploy-service.sh / feishu-deploy-handler.sh /
+# post-dev-hook.sh 的统一入口）。
+# 优先级: WORKSPACE_DIR 环境变量 > 容器内挂载点 /workspace > ${PROJECT_ROOT}/workspace
+# 背景: docker exec 不经过 start.sh（不会注入 WORKSPACE_DIR），容器内直接调用
+#       部署脚本时此前回退到 /opt/devpilot/workspace（不存在）导致 --list 等
+#       命令静默失败。/.dockerenv 是 Docker 容器标准标志文件，用它可以区分
+#       容器与宿主机，避免宿主机恰好存在 /workspace 目录时误判。
+# 用法: WORKSPACE_DIR="$(resolve_workspace_dir)"
+resolve_workspace_dir() {
+    if [ -n "${WORKSPACE_DIR:-}" ]; then
+        echo "${WORKSPACE_DIR}"
+    elif [ -d /workspace ] && [ -f /.dockerenv ]; then
+        echo "/workspace"
+    else
+        echo "$(get_project_root)/workspace"
+    fi
 }
 
 # ============================================================

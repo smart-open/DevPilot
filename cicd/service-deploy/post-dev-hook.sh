@@ -23,10 +23,11 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/common.sh"
 
 # ---- 定位脚本目录 ----
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(get_project_root)"
-# 允许调用方（如容器内 start.sh）通过环境变量覆盖 workspace 路径，
-# 否则按宿主机布局推算（SCRIPT_DIR/../.. 的 workspace 子目录）。
-WORKSPACE_DIR="${WORKSPACE_DIR:-${PROJECT_ROOT}/workspace}"
+# workspace 定位统一走 common.sh:resolve_workspace_dir()：
+# WORKSPACE_DIR 环境变量 > 容器内挂载点 /workspace > ${PROJECT_ROOT}/workspace。
+# 容器内由 start.sh 注入 WORKSPACE_DIR=/workspace；docker exec 直调时靠
+# /.dockerenv 标志自动识别 /workspace，不再回退到不存在的 /opt/devpilot/workspace。
+WORKSPACE_DIR="$(resolve_workspace_dir)"
 DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy-service.sh"
 
 # ---- 参数解析 ----

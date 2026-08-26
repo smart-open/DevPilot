@@ -109,11 +109,11 @@ docker compose config | grep container_name    # 列出全部 container_name
 | OpenClaw 模板 | `conf/openclaw/openclaw.default.json`（含 `{{...}}` 占位符） |
 | Claude + litellm 启动 | `conf/claude/start.sh`（双进程：litellm 后台 + Claude 前台） |
 | LiteLLM 配置生成 | `conf/litellm/gen_config.py`（读 .env → 输出 `/opt/litellm/litellm_config.yaml`） |
-| 公共函数库 | `cicd/lib/common.sh`（颜色/日志/健康检查，所有脚本 source 它） |
+| 公共函数库 | `cicd/lib/common.sh`（颜色/日志/健康检查/workspace 定位 `resolve_workspace_dir()`，所有脚本 source 它） |
 | CI Lint | `cicd/ci/scripts/lint.sh` |
 | K8s Helm 部署 | `cicd/scripts/deploy.sh --mode k8s --helm`（K8s 唯一方式，不再有 kubectl 原生清单） |
 | 服务自动部署钩子 | `cicd/service-deploy/post-dev-hook.sh`（由 `start.sh` 在 `DEVPILOT_AUTO_DEPLOY=true` 时触发） |
-| 技能文件 | `skills/`（7 个 MD：`explore / prd / plan / dev / review / test / deploy`）；`setup-skills.sh` 安装到 `data/openclaw/.openclaw/skills/` |
+| 技能文件 | `skills/`（8 个 MD：`explore / prd / plan / dev / review / test / deploy / deploy-command`）；`setup-skills.sh` 安装到 `data/openclaw/.openclaw/skills/` |
 | 主力用户文档 | `用户操作手册.md`（操作）/ `运维操作手册.md`（运维）/ `产品架构技术设计说明书.md`（架构） |
 
 > ⚠️ **不要盲信 README 表格里的容器数**——历史上从 4 容器合并到 3 容器（commit `500c286`），如果再次合并/拆分，请同步更新本卡、README、运维手册 §3、表 1。
@@ -161,6 +161,8 @@ docker exec devpilot-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" ping'
 | 不要在 OpenClaw 容器内手动改 `/data/openclaw/.openclaw/openclaw.json` 顶层结构 | 2026.7.x 严格 schema 校验，非法字段 → restart-loop。改用 `openclaw config set ...` 或 `make reset-openclaw` |
 | 不要给未配 key 的平台保留 provider | init-openclaw.sh §3.4.1 已过滤，但若是手动改模板/配置请保留同一逻辑 |
 | 不要把 `OPENCLAW_GATEWAY_TOKEN` 留为 `change-me-to-secure-token` | init-openclaw.sh 会自动生成；占位符运行可视但安全风险大 |
+| 不要给 `common.sh` 的 `_DEVPILOT_COMMON_LOADED` 加 `export` | guard 变量泄漏进子进程（如 `bash deploy-service.sh`），子脚本 source 公共库被短路 → `setup_error_trap: command not found`（2026-08-26 已修复，防回归） |
+| 部署脚本不要自行拼接 `${PROJECT_ROOT}/workspace` | 统一用 `common.sh:resolve_workspace_dir()`（WORKSPACE_DIR env > 容器 `/workspace` > PROJECT_ROOT/workspace），否则容器内 `docker exec` 直调会回退到不存在的 `/opt/devpilot/workspace` |
 
 ---
 

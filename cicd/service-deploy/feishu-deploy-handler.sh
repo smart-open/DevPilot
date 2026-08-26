@@ -25,12 +25,11 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/common.sh"
 
 # ---- 定位脚本目录 ----
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(get_project_root)"
 DEPLOY_SCRIPT="${SCRIPT_DIR}/deploy-service.sh"
-# 容器内启动时 WORKSPACE_DIR 由调用方注入为 /workspace（与 docker-compose.yml
-# 卷挂载 ./workspace:/workspace 对齐）。宿主机直接调用可默认不设，落到
-# ${PROJECT_ROOT}/workspace。与 post-dev-hook.sh:29、deploy-service.sh:130 行为对齐。
-WORKSPACE_DIR="${WORKSPACE_DIR:-${PROJECT_ROOT}/workspace}"
+# workspace 定位统一走 common.sh:resolve_workspace_dir()：
+# WORKSPACE_DIR 环境变量 > 容器内挂载点 /workspace > ${PROJECT_ROOT}/workspace。
+# 容器内 docker exec 直调时自动识别 /workspace，无需 start.sh 显式注入。
+WORKSPACE_DIR="$(resolve_workspace_dir)"
 
 # ---- 加载 YAML 解析库 ----
 source "${SCRIPT_DIR}/lib/yaml-parser.sh"
@@ -88,13 +87,13 @@ case "${SUBCMD}" in
             exit 0
         fi
 
-        # 检查 Docker 容器状态
+        # 检查 Docker 容器状态（容器内无 docker CLI 时跳过探测，落到 K8s/未部署分支）
         container_name="devpilot-${svc_name}"
-        if docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
+        if command -v docker &>/dev/null && docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
             status=$(docker ps --filter "name=^${container_name}$" --format "{{.Status}}")
             ports=$(docker ps --filter "name=^${container_name}$" --format "{{.Ports}}")
             output_card "服务状态: ${svc_name}" "状态: 运行中\n容器: ${container_name}\nDocker 状态: ${status}\n端口: ${ports}" "green"
-        elif docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
+        elif command -v docker &>/dev/null && docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
             output_card "服务状态: ${svc_name}" "状态: 已停止\n容器: ${container_name}" "yellow"
         else
             # 检查 K8s
@@ -136,8 +135,8 @@ case "${SUBCMD}" in
         fi
 
         container_name="devpilot-${svc_name}"
-        # 优先检查 Docker 容器
-        if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
+        # 优先检查 Docker 容器（容器内无 docker CLI 时跳过，落到 K8s 分支）
+        if command -v docker &>/dev/null && docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
             logs=$(docker logs --tail 50 "${container_name}" 2>&1)
             output_card "服务日志: ${svc_name}" "${logs}" "blue"
         else
@@ -166,8 +165,8 @@ case "${SUBCMD}" in
         fi
 
         container_name="devpilot-${svc_name}"
-        # 优先检查 Docker 容器
-        if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
+        # 优先检查 Docker 容器（容器内无 docker CLI 时跳过，落到 K8s 分支）
+        if command -v docker &>/dev/null && docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
             if docker restart "${container_name}" &>/dev/null; then
                 output_card "重启服务: ${svc_name}" "服务已成功重启\n容器: ${container_name}" "green"
             else
