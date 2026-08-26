@@ -113,7 +113,7 @@ docker compose config | grep container_name    # 列出全部 container_name
 | CI Lint | `cicd/ci/scripts/lint.sh` |
 | K8s Helm 部署 | `cicd/scripts/deploy.sh --mode k8s --helm`（K8s 唯一方式，不再有 kubectl 原生清单） |
 | 服务自动部署钩子 | `cicd/service-deploy/post-dev-hook.sh`（由 `start.sh` 在 `DEVPILOT_AUTO_DEPLOY=true` 时触发） |
-| 技能文件 | `skills/`（8 个 MD：`explore / prd / plan / dev / review / test / deploy / deploy-command`）；`setup-skills.sh` 安装到 `data/openclaw/.openclaw/skills/` |
+| 技能文件 | `skills/`（8 个技能**目录** `<name>/SKILL.md` + YAML frontmatter：`explore / prd / plan / dev / review / test / g5-deploy / deploy`）；`setup-skills.sh` 安装到 `data/openclaw/.openclaw/skills/`（OpenClaw managed skills root），装完必须 `docker compose restart openclaw` |
 | 主力用户文档 | `用户操作手册.md`（操作）/ `运维操作手册.md`（运维）/ `产品架构技术设计说明书.md`（架构） |
 
 > ⚠️ **不要盲信 README 表格里的容器数**——历史上从 4 容器合并到 3 容器（commit `500c286`），如果再次合并/拆分，请同步更新本卡、README、运维手册 §3、表 1。
@@ -171,6 +171,7 @@ docker exec devpilot-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" ping'
 - **verify.sh 在 `litellm 模型注册数` 上有 bash 写法 bug**（`grep -c || echo 0` 导致 MODEL_COUNT 含换行，触发 `integer expression expected`），不影响实际服务（OpenClaw 已成功 call 上游证明 litellm 注册有效）。修法见 `运维操作手册.md` §13 与本卡 §9 排障。
 - **verify.sh 在 OpenClaw gateway 状态探测命令上选错**（`openclaw gateway status` 返回 systemd-style 字符串，非真实探活），实际服务正常（容器日志 `gateway ready` + 飞书 WS 已 ready）。
 - **OpenClaw `gateway.controlUi.allowInsecureAuth=true` 在容器内被显式声明以绕过 HTTP 明文认证**——生产环境套反向代理 + TLS 后应设 `DEVPILLOT_INSECURE_AUTH=false`。
+- **OpenClaw gateway 存在堆增长倾向（2026-08-26 实测）**：处理长 SSE 流式回复后 V8 堆可增至 ~250MB，曾撞默认堆上限崩溃（`JavaScript heap out of memory`，非 137 OOM）。已缓解：compose 配 `NODE_OPTIONS=--max-old-space-size=512` + 容器限制 1024M。若长会话下仍复现，按运维手册 §8.1.4/§13.7 同步上调堆与容器限制；根治需盯上游版本。
 
 ---
 
@@ -191,6 +192,8 @@ docker exec devpilot-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" ping'
 - ❌ 不要拆回 4 容器（`devpilot-claude` 与 `devpilot-litellm` 已合并，commit `500c286`）
 - ❌ 不要升级 LiteLLM 到 1.82.7/1.82.8（TeamPCP 供应链投毒，PyPI 已隔离；固定 `1.82.6`，要升只用 `1.83.0` 干净版）
 - ❌ 不要把 `LITELLM_PROXY_URL` 改成 `litellm:4000` 之类的旧引用（合并后服务名是 `devpilot-claude-litellm`）
+- ❌ 不要以平铺 `*-SKILL.md` 文件安装技能（OpenClaw 只发现「目录 + `SKILL.md` + frontmatter（name/description）」格式，平铺文件静默不加载——2026-08-26 前全部技能因此从未生效，含 `/deploy` 路由）
+- ❌ 不要给技能起与命令语义冲突的重复 name（`deploy` 已被命令路由技能占用，研发流程 G5 技能叫 `g5-deploy`）
 
 ---
 
@@ -206,6 +209,8 @@ docker exec devpilot-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" ping'
 | Claude Code 调用 4xx | 看 `docker compose logs -f claude-litellm`；以及 `/home/node/.claude/settings.json` 是否仍指向 `127.0.0.1:4000` |
 | Claude Code 报 "no such model" | `/opt/litellm/litellm_config.yaml` 的 `model_name` 与 `ANTHROPIC_MODEL` 要一致 |
 | OpenClaw 启动循环 / 立刻退出 | `docker exec devpilot-openclaw cat /tmp/oc_validate.log` / `oc_doctor.log`（init-openclaw.sh 自动写入） |
+| openclaw 日志 `JavaScript heap out of memory`（V8 堆上限，非 137 OOM） | 已配 `NODE_OPTIONS=--max-old-space-size=512` + 容器 1024M；仍复现则按运维手册 §13.7 方法 3 同步上调堆与容器限制 |
+| 飞书 `/deploy` 不识别 / Agent 乱猜命令 | `docker exec devpilot-openclaw openclaw skills list` 看技能是否加载；确认 `./setup-skills.sh` 已跑（目录格式）+ `docker compose restart openclaw` 已重启；曾因平铺文件格式全部技能不加载（2026-08-26 修复） |
 | `TOKEN required` | `OPENCLAW_GATEWAY_TOKEN` 不要用占位符；让 init-openclaw.sh §2.1 自动生成 |
 | **详细排障手册** | `运维操作手册.md §13` |
 

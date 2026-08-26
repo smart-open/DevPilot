@@ -3,7 +3,12 @@ set -e
 
 # ============================================================
 # DevPilot 技能文件一键搭建脚本
-# 功能：将 skills/ 目录下的技能文件复制到 data/openclaw/.openclaw/skills/（容器 OpenClaw 挂载点）
+# 功能：将 skills/<技能名>/SKILL.md 目录结构复制到
+#       data/openclaw/.openclaw/skills/（OpenClaw 容器挂载点）
+# 格式：OpenClaw 技能规范 = 「目录 + SKILL.md + YAML frontmatter
+#       （name/description）」。平铺的 *-SKILL.md 文件 OpenClaw
+#       不会发现——2026-08-26 前的安装方式即为该错误格式，
+#       导致全部技能（含 /deploy 路由）从未被加载。
 # 用法: ./setup-skills.sh
 # 依赖：cicd/lib/common.sh（公共函数库）
 # ============================================================
@@ -14,108 +19,91 @@ source "${SCRIPT_DIR}/cicd/lib/common.sh"
 
 SKILLS_DIR="${SCRIPT_DIR}/skills"
 # 装到容器 OpenClaw 的挂载点：宿主机 ./data/openclaw/.openclaw/skills 对应容器内
-# /data/openclaw/.openclaw/skills（OPENCLAW_HOME=/data/openclaw，见 openclaw Dockerfile）。
-# 此前装到宿主机 ~/.openclaw/skills 与容器内 /data/openclaw 互不相通，技能无法被读取。
+# /data/openclaw/.openclaw/skills。OPENCLAW_HOME=/data/openclaw（见 Dockerfile），
+# state-dir 为 ${OPENCLAW_HOME}/.openclaw，其下 skills/ 即 OpenClaw 的
+# managed skills root（官方加载优先级第 4 级）。
 TARGET_DIR="${SCRIPT_DIR}/data/openclaw/.openclaw/skills"
 
 print_header "DevPilot 技能文件搭建"
 
 # ============================================================
-# 1. 检查源目录
+# 1. 发现技能目录（skills/<name>/SKILL.md）并校验 frontmatter
 # ============================================================
-info "检查技能文件目录..."
-if [ ! -d "${SKILLS_DIR}" ]; then
-    error "技能文件目录不存在: ${SKILLS_DIR}"
-    exit 1
-fi
-
-# 自动发现 skills/ 目录下的所有 *-SKILL.md 文件
-REQUIRED_SKILLS=()
-for f in "${SKILLS_DIR}"/*-SKILL.md; do
-    [ -f "$f" ] && REQUIRED_SKILLS+=("$(basename "$f")")
-done
-
-if [ ${#REQUIRED_SKILLS[@]} -eq 0 ]; then
-    error "未找到技能文件（*-SKILL.md），请检查 ${SKILLS_DIR} 目录"
-    exit 1
-fi
-
-MISSING=0
-for skill in "${REQUIRED_SKILLS[@]}"; do
-    if [ ! -f "${SKILLS_DIR}/${skill}" ]; then
-        error "缺少技能文件: ${skill}"
-        MISSING=$((MISSING + 1))
+info "扫描技能目录 ${SKILLS_DIR} ..."
+SKILL_NAMES=()
+for d in "${SKILLS_DIR}"/*/; do
+    [ -f "${d}SKILL.md" ] || continue
+    name="$(basename "${d}")"
+    # OpenClaw 必填字段校验（缺任一技能不会出现在 Agent 上下文）
+    if ! head -10 "${d}SKILL.md" | grep -q '^name:'; then
+        error "技能 ${name}/SKILL.md 缺少 frontmatter name 字段（OpenClaw 必需）"
+        exit 1
     fi
+    if ! head -10 "${d}SKILL.md" | grep -q '^description:'; then
+        error "技能 ${name}/SKILL.md 缺少 frontmatter description 字段（OpenClaw 必需）"
+        exit 1
+    fi
+    SKILL_NAMES+=("${name}")
 done
 
-if [ ${MISSING} -gt 0 ]; then
-    error "有 ${MISSING} 个技能文件缺失，请检查 skills/ 目录"
+if [ ${#SKILL_NAMES[@]} -eq 0 ]; then
+    error "未发现任何 <技能名>/SKILL.md 目录结构，请检查 ${SKILLS_DIR}"
     exit 1
 fi
-
-success "所有 ${#REQUIRED_SKILLS[@]} 个技能文件就绪"
+success "发现 ${#SKILL_NAMES[@]} 个技能: ${SKILL_NAMES[*]}"
 
 # ============================================================
-# 2. 创建目标目录
+# 2. 安装（整目录复制，覆盖旧版）
 # ============================================================
-info "创建目标目录: ${TARGET_DIR}"
 mkdir -p "${TARGET_DIR}"
-success "目录已创建"
-
-# ============================================================
-# 3. 复制技能文件
-# ============================================================
-info "复制技能文件..."
-
-for skill in "${REQUIRED_SKILLS[@]}"; do
-    cp "${SKILLS_DIR}/${skill}" "${TARGET_DIR}/${skill}"
-    success "已复制: ${skill}"
+info "安装到 ${TARGET_DIR} ..."
+for name in "${SKILL_NAMES[@]}"; do
+    rm -rf "${TARGET_DIR}/${name}"
+    cp -r "${SKILLS_DIR}/${name}" "${TARGET_DIR}/${name}"
+    success "已安装: ${name}/SKILL.md"
 done
 
 # ============================================================
-# 4. 验证安装
+# 3. 清理历史遗留的平铺格式文件（OpenClaw 无法发现，留着误导排障）
 # ============================================================
-echo ""
-info "验证安装..."
-INSTALLED=0
-for skill in "${REQUIRED_SKILLS[@]}"; do
-    if [ -f "${TARGET_DIR}/${skill}" ]; then
-        INSTALLED=$((INSTALLED + 1))
-    fi
+LEGACY=0
+for f in "${TARGET_DIR}"/*-SKILL.md; do
+    [ -f "$f" ] || continue
+    rm -f "$f"
+    warn "已清理旧格式文件: $(basename "$f")"
+    LEGACY=$((LEGACY + 1))
 done
-
-if [ ${INSTALLED} -eq ${#REQUIRED_SKILLS[@]} ]; then
-    success "全部 ${INSTALLED} 个技能文件已安装"
-else
-    error "仅安装了 ${INSTALLED}/${#REQUIRED_SKILLS[@]} 个技能文件"
-    exit 1
+if [ "${LEGACY}" -gt 0 ]; then
+    info "共清理 ${LEGACY} 个旧格式平铺文件"
 fi
 
 # ============================================================
-# 5. 打印摘要
+# 4. 打印摘要
 # ============================================================
 echo ""
 print_separator
-success "技能文件搭建完成！"
+success "技能安装完成！共 ${#SKILL_NAMES[@]} 个"
 print_separator
 echo ""
 echo -e "${CYAN}安装位置：${NC} ${TARGET_DIR}"
 echo ""
-echo -e "${CYAN}已安装技能：${NC}"
-echo "  explore-SKILL.md           - 需求探索（产品经理角色）"
-echo "  prd-SKILL.md               - 需求分析（系统架构师角色）"
-echo "  plan-SKILL.md              - 计划拆解（技术主管角色）"
-echo "  dev-SKILL.md               - 开发执行（全栈工程师角色）"
-echo "  review-SKILL.md            - 代码审查（质量工程师角色）"
-echo "  test-SKILL.md              - 测试验证（QA 工程师角色）"
-echo "  deploy-SKILL.md            - 提交部署（DevOps 工程师角色）"
-echo "  deploy-command-SKILL.md    - /deploy 命令路由（飞书部署命令解释器）"
+echo -e "${CYAN}已安装技能（斜杠命令 = 技能 name）：${NC}"
+echo "  /explore   - 需求探索（G1，产品经理角色）"
+echo "  /prd       - 需求分析（G2，系统架构师角色）"
+echo "  /plan      - 计划拆解（G3，技术主管角色）"
+echo "  /dev       - 开发执行（全栈工程师角色）"
+echo "  /review    - 代码审查（质量工程师角色）"
+echo "  /test      - 测试验证（G4，QA 工程师角色）"
+echo "  /g5-deploy - 提交部署（G5，DevOps 工程师角色，研发流程阶段）"
+echo "  /deploy    - 服务部署命令路由（飞书部署命令解释器）"
 echo ""
 echo -e "${CYAN}研发流程：${NC}"
 echo "  需求探索(G1) -> 需求分析(G2) -> 计划拆解(G3) -> 开发执行 -> 代码审查 -> 测试验证(G4) -> 提交部署(G5)"
 echo ""
-echo -e "${CYAN}飞书命令：${NC}"
-echo "  /deploy <服务名>|--list|--status|--logs|--restart|--cleanup   （见 deploy-command-SKILL.md）"
+echo -e "${CYAN}飞书部署命令：${NC}"
+echo "  /deploy <服务名>|--list|--status|--logs|--restart|--cleanup|--help"
 echo ""
-echo -e "${YELLOW}提示：${NC}修改 skills/ 目录下的文件后，重新运行此脚本即可更新。"
+echo -e "${YELLOW}重要：${NC}技能变更后必须重启 openclaw 容器才会重新加载："
+echo "  docker compose restart openclaw"
+echo "  验证技能已加载：docker exec devpilot-openclaw openclaw skills list"
 echo ""

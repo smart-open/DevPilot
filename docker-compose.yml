@@ -120,9 +120,21 @@ services:
       # WebSocket 来源白名单。留空则自动探测容器内 IP（localhost/SSH 隧道场景可用，
       # 局域网浏览器访问建议显式填写宿主机 LAN IP，如 192.168.1.100）。
       - DEVPILOT_HOST_IP=${DEVPILOT_HOST_IP:-}
+      # V8 堆上限显式设为 512MB。Node 在 768M 容器内的默认堆上限约 256MB，
+      # gateway 处理长 SSE 流式回复时堆增长会撞限崩溃（"JavaScript heap out
+      # of memory"，2026-08-26 实测，见运维手册 §13.7）；与下方容器 1024M 限制配套
+      # （堆 512M + Node 运行时/外部内存开销）。gateway 由 `openclaw gateway`
+      # 子进程运行，NODE_OPTIONS 随容器环境透传生效。
+      - NODE_OPTIONS=--max-old-space-size=512
     volumes:
       - ./data/openclaw:/data/openclaw
       - ./logs/openclaw:/logs
+      # /deploy 命令执行依赖（skills/deploy/SKILL.md 通道 A）：部署处理器脚本 +
+      # workspace 下的 service.yaml。只读挂载——本容器无 docker CLI，构建/部署类
+      # 动作会被脚本前置检查拦截并提示宿主机执行（见用户操作手册 4.7）。
+      # cicd 路径与 devpilot-claude-litellm 容器保持一致（/opt/devpilot/cicd）。
+      - ./cicd:/opt/devpilot/cicd:ro
+      - ./workspace:/workspace:ro
     # 【P0-7】OpenClaw 由 host 网络改为 bridge 网络（devpilot-network），恢复容器隔离：
     #   - Redis 不再发布到宿主机，OpenClaw 经服务名 redis:6379 访问（见 init-openclaw.sh）
     #   - LiteLLM 经服务名 devpilot-claude-litellm:4000 访问（下方 LITELLM_PROXY_URL）
@@ -150,10 +162,12 @@ services:
       start_period: 60s
     deploy:
       resources:
+        # 2026-08-26 由 768M 上调：V8 堆上限提至 512MB（见上方 NODE_OPTIONS）后，
+        # 堆 + Node 运行时/外部内存开销在 768M 内过于紧张，与 claude-litellm 对齐取 1024M
         limits:
-          memory: 768M
+          memory: 1024M
         reservations:
-          memory: 512M
+          memory: 768M
 
   # ============================================================
   # Claude Code + LiteLLM：合体容器（合并原 devpilot-claude 与 devpilot-litellm）

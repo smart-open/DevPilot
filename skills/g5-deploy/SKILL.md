@@ -1,3 +1,8 @@
+---
+name: g5-deploy
+description: "提交部署（G5，DevOps 工程师角色）：测试通过后执行构建与上线部署，输出 HITL 上线确认卡片，完成交付闭环。"
+---
+
 # 技能：提交部署（Deploy）
 
 <!--

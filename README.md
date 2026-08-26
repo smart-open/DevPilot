@@ -131,17 +131,18 @@ DEVPILOT_AUTO_DEPLOY=true
 
 ## AI 研发流程技能
 
-项目内置 7 个 AI 研发流程技能，覆盖从需求探索到提交部署的完整闭环：
+项目内置 8 个 OpenClaw 技能（7 个研发流程技能 + 1 个 `/deploy` 命令路由技能），覆盖从需求探索到提交部署的完整闭环：
 
-| 技能 | 文件 | 角色 | 门控 |
+| 技能 | 目录 | 角色 | 门控 |
 |------|------|------|------|
-| 需求探索 | `explore-SKILL.md` | 产品经理 | G1 - 需求确认 |
-| 需求分析 | `prd-SKILL.md` | 系统架构师 | G2 - PRD 审核 |
-| 计划拆解 | `plan-SKILL.md` | 技术主管 | G3 - 计划审查 |
-| 开发执行 | `dev-SKILL.md` | 全栈工程师 | 无（全自动） |
-| 代码审查 | `review-SKILL.md` | 质量工程师 | 无（自动审查） |
-| 测试验证 | `test-SKILL.md` | QA 工程师 | G4 - 部署验收 |
-| 提交部署 | `deploy-SKILL.md` | DevOps 工程师 | G5 - 上线确认 |
+| 需求探索 | `explore/` | 产品经理 | G1 - 需求确认 |
+| 需求分析 | `prd/` | 系统架构师 | G2 - PRD 审核 |
+| 计划拆解 | `plan/` | 技术主管 | G3 - 计划审查 |
+| 开发执行 | `dev/` | 全栈工程师 | 无（全自动） |
+| 代码审查 | `review/` | 质量工程师 | 无（自动审查） |
+| 测试验证 | `test/` | QA 工程师 | G4 - 部署验收 |
+| 提交部署 | `g5-deploy/` | DevOps 工程师 | G5 - 上线确认 |
+| 部署命令路由 | `deploy/` | 命令解释器 | 变更类命令二次确认 |
 
 ```
 需求探索(G1) -> 需求分析(G2) -> 计划拆解(G3) -> 开发执行 -> 代码审查 -> 测试验证(G4) -> 提交部署(G5)
@@ -153,7 +154,7 @@ DEVPILOT_AUTO_DEPLOY=true
 make setup-skills    # 或 ./setup-skills.sh
 ```
 
-技能文件将复制到 `data/openclaw/.openclaw/skills/` 目录，支持多技术栈（Node.js / Python / Go / Java / Rust / .NET / PHP）、多部署目标（Docker / Docker Compose / K8s / Helm）和多代码托管平台（GitHub / Gitee / GitLab）。代码审查阶段使用 `alibaba/open-code-review`（TRAE-code-review）技能对代码变更进行智能审查。
+技能以「目录 + `SKILL.md` + YAML frontmatter」的 OpenClaw 标准格式复制到 `data/openclaw/.openclaw/skills/`，支持多技术栈（Node.js / Python / Go / Java / Rust / .NET / PHP）、多部署目标（Docker / Docker Compose / K8s / Helm）和多代码托管平台（GitHub / Gitee / GitLab）。代码审查阶段使用 `alibaba/open-code-review`（TRAE-code-review）技能对代码变更进行智能审查。技能变更后需 `docker compose restart openclaw` 重新加载。
 
 ## 目录结构
 
@@ -173,14 +174,15 @@ devpilot/
 │   ├── openclaw/
 │   └── devpilot-claude-litellm/
 ├── dockerfiles/                # Dockerfile
-├── skills/                     # AI 研发流程技能（7 个阶段）
-│   ├── explore-SKILL.md        # 需求探索
-│   ├── prd-SKILL.md            # 需求分析
-│   ├── plan-SKILL.md           # 计划拆解
-│   ├── dev-SKILL.md            # 开发执行
-│   ├── review-SKILL.md         # 代码审查（alibaba/open-code-review）
-│   ├── test-SKILL.md           # 测试验证
-│   └── deploy-SKILL.md         # 提交部署
+├── skills/                     # OpenClaw 技能（目录 + SKILL.md + frontmatter）
+│   ├── explore/SKILL.md        # 需求探索（G1）
+│   ├── prd/SKILL.md            # 需求分析（G2）
+│   ├── plan/SKILL.md           # 计划拆解（G3）
+│   ├── dev/SKILL.md            # 开发执行
+│   ├── review/SKILL.md         # 代码审查（alibaba/open-code-review）
+│   ├── test/SKILL.md           # 测试验证（G4）
+│   ├── g5-deploy/SKILL.md      # 提交部署（G5）
+│   └── deploy/SKILL.md         # /deploy 服务部署命令路由
 ├── scripts/                    # 工具脚本
 │   ├── llm-init.sh             # 多平台大模型统一初始化脚本
 │   ├── rebuild.sh              # 全量清空重建脚本（down→迁移→清→rebuild→up→验证）
