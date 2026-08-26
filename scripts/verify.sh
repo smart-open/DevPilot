@@ -16,6 +16,11 @@
 
 set +e  # 不因单项失败退出
 
+# 以 sh 调用时重 exec 为 bash（本脚本使用 BASH_SOURCE / [[ ]] 等 bash 语法）
+if [ -z "${BASH_VERSION:-}" ]; then
+    exec bash "$0" "$@"
+fi
+
 # 颜色
 if [ -t 1 ]; then
     RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -35,6 +40,7 @@ echo ""
 
 # ---- 切到仓库根目录 ----
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../cicd/lib/common.sh"   # get_project_root 等公共函数
 PROJECT_ROOT="$(get_project_root)"
 cd "$PROJECT_ROOT" || { echo "无法切到 $PROJECT_ROOT"; exit 1; }
 

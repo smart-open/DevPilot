@@ -370,7 +370,7 @@ fi
 # 加载版本配置
 if [ -f "versions.env" ]; then
     detail "加载 versions.env..."
-    source versions.env
+    source ./versions.env
     detail "  Node.js:       ${NODE_IMAGE_TAG}"
     detail "  OpenClaw:      ${OPENCLAW_VERSION}"
     detail "  Claude Code:   ${CLAUDE_CODE_VERSION}"

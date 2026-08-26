@@ -19,6 +19,11 @@
 
 set -e
 
+# 以 sh 调用时重 exec 为 bash（本脚本使用 BASH_SOURCE / [[ =~ ]] 等 bash 语法）
+if [ -z "${BASH_VERSION:-}" ]; then
+    exec bash "$0" "$@"
+fi
+
 # 颜色（无 tty 时降级为纯文本）
 if [ -t 1 ]; then
     RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -28,6 +33,7 @@ fi
 
 # ---- 切到仓库根目录 ----
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../cicd/lib/common.sh"   # get_project_root 等公共函数
 PROJECT_ROOT="$(get_project_root)"
 cd "$PROJECT_ROOT"
 
@@ -44,7 +50,8 @@ if [ ! -f versions.env ]; then
     exit 1
 fi
 set -a
-source versions.env
+# ./ 前缀必须保留：无斜杠路径在 POSIX 模式（sh 调用）下走 PATH 搜索而非当前目录
+source ./versions.env
 set +a
 echo -e "  ✓ NODE=${NODE_IMAGE_TAG} OPENCLAW=${OPENCLAW_VERSION} CLAUDE_CODE=${CLAUDE_CODE_VERSION} LITELLM=${LITELLM_VERSION}"
 
@@ -55,7 +62,7 @@ if [ ! -f .env ]; then
     exit 1
 fi
 set -a
-source .env
+source ./.env
 set +a
 if [ -z "${LLM_PLATFORM:-}" ]; then
     echo -e "${RED}  错误：.env 中 LLM_PLATFORM 未设置${NC}"
