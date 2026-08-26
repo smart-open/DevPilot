@@ -3,12 +3,11 @@
 # DevPilot 端到端验证脚本
 # ============================================================
 # 用途：重建或启动后，跑一遍确认整套链路工作正常
-#   - 容器层（4 容器 Up + 镜像名正确无 devpilot- 前缀重复）
+#   - 容器层（3 容器 Up + 镜像存在）
 #   - litellm 代理层（健康 + 模型注册 + Anthropic 协议探测）
 #   - Claude Code 端到端（settings.json 指向 litellm + 实际对话）
 #   - OpenClaw 飞书（gateway + 插件 + 频道）
 #   - Redis（ping）
-#   - 镜像名（验证无 devpilot- 前缀重复）
 #
 # 用法：bash scripts/verify.sh
 # 退出码：0=全通过 / 1=有失败（不阻塞，仅输出汇总）
@@ -44,16 +43,11 @@ source "${SCRIPT_DIR}/../cicd/lib/common.sh"   # get_project_root 等公共函�
 PROJECT_ROOT="$(get_project_root)"
 cd "$PROJECT_ROOT" || { echo "无法切到 $PROJECT_ROOT"; exit 1; }
 
-# ============= 阶段 0: 镜像名（避免 devpilot- 前缀重复） =============
-echo -e "${CYAN}[1/7] 镜像名检查（避免 devpilot-devpilot-claude-litellm 双重前缀）${NC}"
-DUPED=$(docker images --format "{{.Repository}}" | grep -E "^devpilot-devpilot-" || true)
-if [ -z "$DUPED" ]; then
-    check_pass "无 devpilot-devpilot-* 双重前缀镜像"
-else
-    check_fail "发现双重前缀镜像：$DUPED（说明 docker-compose.yml 还有 build 服务未设 image: 字段）"
-fi
-# 期望的核心镜像
-for img in devpilot-openclaw devpilot-claude-litellm devpilot-claude-litellm; do
+# ============= 阶段 0: 镜像存在性 =============
+# 双重前缀（devpilot-devpilot-*）检查已移除：docker-compose.yml 所有 build 服务
+# 均已显式设置 image: 字段（commit 812c51a），根因已根治，无需运行时兜底检查。
+echo -e "${CYAN}[1/7] 镜像存在性检查${NC}"
+for img in devpilot-openclaw devpilot-claude-litellm; do
     if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${img}:latest$"; then
         check_pass "镜像 ${img}:latest 存在"
     else
@@ -64,7 +58,7 @@ echo ""
 
 # ============= 阶段 1: 容器层 =============
 echo -e "${CYAN}[2/7] 容器状态${NC}"
-EXPECTED=("devpilot-redis" "devpilot-openclaw" "devpilot-claude-litellm" "devpilot-claude-litellm")
+EXPECTED=("devpilot-redis" "devpilot-openclaw" "devpilot-claude-litellm")
 for name in "${EXPECTED[@]}"; do
     STATUS=$(docker inspect --format '{{.State.Status}}' "$name" 2>/dev/null)
     if [ "$STATUS" = "running" ]; then
