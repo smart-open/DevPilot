@@ -50,10 +50,15 @@ def main():
             continue
         base = env(f"{prefix}_BASE_URL", default=def_base)
         model = env(f"{prefix}_MODEL", default=def_model)
+        # litellm_params.model 必须带 provider 前缀：裸模型名（如 agnes-2.5-flash）
+        # 会让 LiteLLM 抛 "LLM Provider NOT provided"，该部署注册失败被跳过，
+        # 后续请求报 "no healthy deployments"（2026-08-26 实测）。
+        # 五个平台均为 OpenAI Chat Completion 兼容协议，统一走 openai/ provider，
+        # 由 api_base 指向各平台端点。
         model_list.append({
             "model_name": f"{pname}/{model}",
             "litellm_params": {
-                "model": model,
+                "model": f"openai/{model}",
                 "api_base": base,
                 "api_key": key,
             },

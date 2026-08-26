@@ -48,8 +48,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ---- 安装 Claude Code（BuildKit 缓存挂载加速重建） ----
+# 2026-01（v2.1.15）起 npm 包改为「壳 + 平台原生二进制 optional dependency」：
+# 原生二进制下载失败时 npm 静默跳过（退出码仍为 0），镜像会「构建成功」却没有
+# claude 可执行文件（运行时报 exec: "claude": executable file not found）。
+# 故安装后必须实测 claude --version，失败重试 3 次，仍失败则中断构建 fail-fast。
+# 注意 $$i 转义：单 $ 会被 Dockerfile 的变量替换阶段吃掉。
 RUN --mount=type=cache,target=/root/.npm \
-    npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+    for i in 1 2 3; do \
+        npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
+            && claude --version \
+            && break; \
+        echo "[retry] claude-code 安装不完整（原生二进制未落地），第 $$i/3 次重试"; \
+        npm uninstall -g @anthropic-ai/claude-code 2>/dev/null || true; \
+        sleep 5; \
+    done; \
+    claude --version
 
 # ---- 安装 LiteLLM（venv 隔离，不污染系统 python；固定 1.82.6，1.82.7/1.82.8 投毒） ----
 # 供应链加固：固定版本已大幅降低投毒风险；进一步可改用 --require-hashes + pip-compile 锁文件
