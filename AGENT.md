@@ -103,9 +103,11 @@ docker compose config | grep container_name    # 列出全部 container_name
 | 配置向导 | `init.sh`（交互生成 `.env`） |
 | 一键部署 | `deploy.sh`（首次 7 步详细日志） |
 | 启停 | `service.sh`（start/stop/restart/status/health/logs） |
-| 端到端验证 | `scripts/verify.sh`（7 阶段，PASS/FAIL 汇总） |
-| 全量重建 | `scripts/rebuild.sh` |
-| OpenClaw 配置生成 | `conf/openclaw/init-openclaw.sh`（容器内首启运行，含 schema 自愈与 provider 过滤） |
+| 端到端验证 | `scripts/verify.sh`（8 阶段，PASS/FAIL 汇总；阶段 6 检查技能三层 + AGENTS.md + SSH 通道） |
+| 全量重建 | `scripts/rebuild.sh`（清空/保留数据后自动重跑 `setup-skills.sh`，防技能静默丢失） |
+| SSH 部署通道宿主机配置 | `scripts/setup-deploy-ssh.sh`（root 一键：受限用户 + forced-command 密钥 + known_hosts + 自测，幂等） |
+| OpenClaw 配置生成 | `conf/openclaw/init-openclaw.sh`（容器内首启运行，含 schema 自愈与 provider 过滤；`OPENCLAW_MODEL` 覆盖 Agent 模型；种子 workspace/AGENTS.md） |
+| Agent 硬路由规则 | `conf/openclaw/AGENTS.md`（OpenClaw 每次会话自动加载：`/` 命令必须命中技能、开发需求必须走 G1→G5；由 setup-skills.sh 安装到 `data/openclaw/.openclaw/workspace/`，镜像 init 种子兜底） |
 | OpenClaw 模板 | `conf/openclaw/openclaw.default.json`（含 `{{...}}` 占位符） |
 | Claude + litellm 启动 | `conf/claude/start.sh`（双进程：litellm 后台 + Claude 前台） |
 | LiteLLM 配置生成 | `conf/litellm/gen_config.py`（读 .env → 输出 `/opt/litellm/litellm_config.yaml`） |
@@ -113,7 +115,7 @@ docker compose config | grep container_name    # 列出全部 container_name
 | CI Lint | `cicd/ci/scripts/lint.sh` |
 | K8s Helm 部署 | `cicd/scripts/deploy.sh --mode k8s --helm`（K8s 唯一方式，不再有 kubectl 原生清单） |
 | 服务自动部署钩子 | `cicd/service-deploy/post-dev-hook.sh`（由 `start.sh` 在 `DEVPILOT_AUTO_DEPLOY=true` 时触发） |
-| 技能文件 | `skills/`（8 个技能**目录** `<name>/SKILL.md` + YAML frontmatter：`explore / prd / plan / dev / review / test / g5-deploy / deploy`）；`setup-skills.sh` 安装到 `data/openclaw/.openclaw/skills/`（OpenClaw managed skills root），装完必须 `docker compose restart openclaw` |
+| 技能文件 | `skills/`（8 个技能**目录** `<name>/SKILL.md` + YAML frontmatter：`explore / prd / plan / dev / review / test / g5-deploy / deploy`）；`setup-skills.sh` 安装到 `data/openclaw/.openclaw/skills/`（OpenClaw managed skills root）并同步 AGENTS.md 到 workspace，装完必须 `docker compose restart openclaw`。斜杠命令名规范化为小写+下划线：`/g5_deploy` |
 | 主力用户文档 | `用户操作手册.md`（操作）/ `运维操作手册.md`（运维）/ `产品架构技术设计说明书.md`（架构） |
 
 > ⚠️ **不要盲信 README 表格里的容器数**——历史上从 4 容器合并到 3 容器（commit `500c286`），如果再次合并/拆分，请同步更新本卡、README、运维手册 §3、表 1。
@@ -131,7 +133,7 @@ sh service.sh stop
 sh service.sh restart
 sh service.sh status
 sh service.sh health           # 浅健康检查
-sh scripts/verify.sh           # 深端到端验证（7 阶段）
+sh scripts/verify.sh           # 深端到端验证（8 阶段）
 ```
 
 ### Docker 直查
@@ -181,7 +183,8 @@ docker exec devpilot-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" ping'
 - `docker-compose.yml` ←→ `versions.env`（版本同步）
 - `conf/openclaw/init-openclaw.sh`（新版飞书格式 + provider 过滤 + allowedOrigins）←→ `conf/openclaw/openclaw.default.json`（模板同步）
 - `scripts/verify.sh` ←→ `cicd/scripts/deploy.sh`（部署/健康一致性）
-- `skills/*.md`（AI 技能）←→ `setup-skills.sh`（安装路径）
+- `skills/*.md`（AI 技能）←→ `setup-skills.sh`（安装路径）←→ `conf/openclaw/AGENTS.md`（硬路由规则，三者同装）
+- `feishu-deploy-handler.sh`（SSH 自动转发）←→ `scripts/setup-deploy-ssh.sh`（宿主机 forced-command 配置）←→ `.env.example`（DEPLOY_SSH_* 文档）
 
 ---
 
@@ -194,6 +197,8 @@ docker exec devpilot-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" ping'
 - ❌ 不要把 `LITELLM_PROXY_URL` 改成 `litellm:4000` 之类的旧引用（合并后服务名是 `devpilot-claude-litellm`）
 - ❌ 不要以平铺 `*-SKILL.md` 文件安装技能（OpenClaw 只发现「目录 + `SKILL.md` + frontmatter（name/description）」格式，平铺文件静默不加载——2026-08-26 前全部技能因此从未生效，含 `/deploy` 路由）
 - ❌ 不要给技能起与命令语义冲突的重复 name（`deploy` 已被命令路由技能占用，研发流程 G5 技能叫 `g5-deploy`）
+- ❌ 不要让 Agent 绕过 `feishu-deploy-handler.sh` 自行 ssh 或自创部署方案（通道判定已下沉到 handler 内部，`skills/deploy/SKILL.md` 与 AGENTS.md 双重禁止；模型临场发挥正是 2026-08-29 修复的问题）
+- ❌ 不要从 `rebuild.sh` 移除 `setup-skills.sh` 自动重跑（清空 `data/` 会抹掉技能与 AGENTS.md，不重装则飞书斜杠命令全部退化为普通对话）
 
 ---
 
@@ -210,7 +215,8 @@ docker exec devpilot-redis sh -c 'redis-cli -a "$REDIS_PASSWORD" ping'
 | Claude Code 报 "no such model" | `/opt/litellm/litellm_config.yaml` 的 `model_name` 与 `ANTHROPIC_MODEL` 要一致 |
 | OpenClaw 启动循环 / 立刻退出 | `docker exec devpilot-openclaw cat /tmp/oc_validate.log` / `oc_doctor.log`（init-openclaw.sh 自动写入） |
 | openclaw 日志 `JavaScript heap out of memory`（V8 堆上限，非 137 OOM） | 已配 `NODE_OPTIONS=--max-old-space-size=512` + 容器 1024M；仍复现则按运维手册 §13.7 方法 3 同步上调堆与容器限制 |
-| 飞书 `/deploy` 不识别 / Agent 乱猜命令 | `docker exec devpilot-openclaw openclaw skills list` 看技能是否加载；确认 `./setup-skills.sh` 已跑（目录格式）+ `docker compose restart openclaw` 已重启；曾因平铺文件格式全部技能不加载（2026-08-26 修复） |
+| 飞书 `/deploy` 不识别 / Agent 乱猜命令 | `docker exec devpilot-openclaw openclaw skills list` 看技能是否加载；`ls data/openclaw/.openclaw/workspace/AGENTS.md` 看硬路由规则；确认 `./setup-skills.sh` 已跑（目录格式）+ `docker compose restart openclaw` 已重启；轻量模型档（flash/turbo）遵循度弱，`.env` 设 `OPENCLAW_MODEL=<平台>/<强模型>`；曾因平铺文件格式全部技能不加载（2026-08-26 修复） |
+| `/deploy` 回贴带 `[ssh][warn] 受控通道不可达` | SSH 受控通道故障但已自动回退本地（保底可用）；重跑 `sudo bash scripts/setup-deploy-ssh.sh` + `docker compose up -d --build openclaw`，详见运维手册 §13.17 |
 | `TOKEN required` | `OPENCLAW_GATEWAY_TOKEN` 不要用占位符；让 init-openclaw.sh §2.1 自动生成 |
 | **详细排障手册** | `运维操作手册.md §13` |
 

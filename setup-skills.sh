@@ -63,6 +63,24 @@ for name in "${SKILL_NAMES[@]}"; do
 done
 
 # ============================================================
+# 2.1 安装 AGENTS.md（Agent 工作区硬路由规则）
+# ============================================================
+# OpenClaw 每次会话开始自动加载工作区 AGENTS.md（本部署为
+# data/openclaw/.openclaw/workspace/AGENTS.md）。没有它，Agent 上下文里
+# 只有技能 name+description 一行摘要，斜杠命令与开发需求会被模型自由发挥。
+# 镜像内 init-openclaw.sh 仅在文件缺失时种子旧版模板；本脚本以仓库
+# conf/openclaw/AGENTS.md 为准覆盖安装（git pull 后重跑即更新规则）。
+AGENTS_SRC="${SCRIPT_DIR}/conf/openclaw/AGENTS.md"
+AGENTS_DST="${SCRIPT_DIR}/data/openclaw/.openclaw/workspace/AGENTS.md"
+if [ -f "${AGENTS_SRC}" ]; then
+    mkdir -p "$(dirname "${AGENTS_DST}")"
+    cp "${AGENTS_SRC}" "${AGENTS_DST}"
+    success "已安装: AGENTS.md（硬路由规则 → ${AGENTS_DST}）"
+else
+    warn "conf/openclaw/AGENTS.md 不存在，跳过（Agent 将缺少技能路由硬约束）"
+fi
+
+# ============================================================
 # 3. 打印摘要
 # ============================================================
 echo ""
@@ -71,16 +89,17 @@ success "技能安装完成！共 ${#SKILL_NAMES[@]} 个"
 print_separator
 echo ""
 echo -e "${CYAN}安装位置：${NC} ${TARGET_DIR}"
+echo -e "${CYAN}Agent 规则：${NC} ${AGENTS_DST}"
 echo ""
-echo -e "${CYAN}已安装技能（斜杠命令 = 技能 name）：${NC}"
-echo "  /explore   - 需求探索（G1，产品经理角色）"
-echo "  /prd       - 需求分析（G2，系统架构师角色）"
-echo "  /plan      - 计划拆解（G3，技术主管角色）"
-echo "  /dev       - 开发执行（全栈工程师角色）"
-echo "  /review    - 代码审查（质量工程师角色）"
-echo "  /test      - 测试验证（G4，QA 工程师角色）"
-echo "  /g5-deploy - 提交部署（G5，DevOps 工程师角色，研发流程阶段）"
-echo "  /deploy    - 服务部署命令路由（飞书部署命令解释器）"
+echo -e "${CYAN}已安装技能（斜杠命令 = 技能 name，命令名规范化为小写+下划线）：${NC}"
+echo "  /explore    - 需求探索（G1，产品经理角色）"
+echo "  /prd        - 需求分析（G2，系统架构师角色）"
+echo "  /plan       - 计划拆解（G3，技术主管角色）"
+echo "  /dev        - 开发执行（全栈工程师角色）"
+echo "  /review     - 代码审查（质量工程师角色）"
+echo "  /test       - 测试验证（G4，QA 工程师角色）"
+echo "  /g5_deploy  - 提交部署（G5，DevOps 工程师角色；技能名 g5-deploy，命令名下划线规范化）"
+echo "  /deploy     - 服务部署命令路由（飞书部署命令解释器）"
 echo ""
 echo -e "${CYAN}研发流程：${NC}"
 echo "  需求探索(G1) -> 需求分析(G2) -> 计划拆解(G3) -> 开发执行 -> 代码审查 -> 测试验证(G4) -> 提交部署(G5)"
@@ -88,7 +107,8 @@ echo ""
 echo -e "${CYAN}飞书部署命令：${NC}"
 echo "  /deploy <服务名>|--list|--status|--logs|--restart|--cleanup|--help"
 echo ""
-echo -e "${YELLOW}重要：${NC}技能变更后必须重启 openclaw 容器才会重新加载："
+echo -e "${YELLOW}重要：${NC}技能 / AGENTS.md 变更后必须重启 openclaw 容器才会重新加载："
 echo "  docker compose restart openclaw"
 echo "  验证技能已加载：docker exec devpilot-openclaw openclaw skills list"
+echo "  验证规则已就位：ls data/openclaw/.openclaw/workspace/AGENTS.md"
 echo ""

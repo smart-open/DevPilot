@@ -27,9 +27,9 @@ description: "DevPilot 服务部署命令路由：处理 /deploy 命令（--list
 | `/deploy --cleanup <服务名>` | 停止并清理服务（删容器/镜像） | 是 |
 | `/deploy --help` | 显示帮助 | 否 |
 
-## 执行通道（按顺序判定）
+## 执行通道
 
-### 通道 A：本容器 exec（默认，已可用）
+### 唯一通道：本容器 exec 调用部署处理器
 
 用 exec 工具执行（`<完整命令>` 为用户 `/deploy` 之后的原始参数，含 `/deploy` 前缀整体传入）：
 
@@ -37,20 +37,15 @@ description: "DevPilot 服务部署命令路由：处理 /deploy 命令（--list
 bash /opt/devpilot/cicd/service-deploy/feishu-deploy-handler.sh "<完整命令>"
 ```
 
-- 查询类命令（`--list` / `--help`）返回真实结果，原样回贴。
-- `--status` / `--logs`：本容器无 docker CLI，对 Docker 部署的服务会显示"未部署"——回贴时附一句说明（容器内无法探测 Docker 运行态，真实状态需宿主机执行）。
-- 构建/部署/清理类命令会被脚本前置检查拦截并提示"请在宿主机执行"——**原样回贴该提示**，不要尝试绕过。
+处理器内部自动判定执行位置，**无需也不允许**自行选择通道或直接执行 ssh：
+
+- **宿主机 SSH 受控通道已配置**（`DEPLOY_SSH_HOST` 已设置且 `data/deploy-keys/` 有密钥）：处理器检测到本容器无 docker CLI 时，自动把命令经 SSH 转发宿主机执行（输出带 `[ssh]` 转发标记），构建/部署/清理/日志/状态全部返回**真实结果**，原样回贴。
+- **未配置 SSH 通道**：处理器本地执行——查询类（`--list` / `--help`）返回真实结果；构建/部署/清理类被脚本前置检查拦截并提示"请在宿主机执行"，**原样回贴该提示**，不要尝试绕过。
+
+通用规则：
 - 输出超过 200 行时：回贴前 100 行 + 末尾 50 行，中间标注"……（省略 N 行）"。
-
-### 通道 B：SSH 受控通道（配置 `DEPLOY_SSH_HOST` 后启用）
-
-构建/部署/清理类命令的正式通道（宿主机才有 docker daemon）：
-
-```bash
-ssh -o BatchMode=yes -o ConnectTimeout=10 devpilot-deploy@${DEPLOY_SSH_HOST} "<完整命令>"
-```
-
-宿主机侧由 SSH forced-command 锁定为只能执行部署处理器（配置方法见《用户操作手册》4.7.3 Phase 2）。超时建议 120s。
+- 超时建议 120s（SSH 转发的构建命令耗时较长）。
+- 通道配置方法见《用户操作手册》4.7.3 Phase 2（`scripts/setup-deploy-ssh.sh` 一键配置），用户询问"如何让 /deploy 直接部署"时指引该脚本。
 
 ## 错误处理
 

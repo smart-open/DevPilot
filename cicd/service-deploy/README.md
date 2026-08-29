@@ -20,6 +20,7 @@ DevPilot 的核心理念：**AI 开发 -> 自动部署 -> 飞书通知**。Claud
   - [post-dev-hook.sh](#post-dev-hooksh)
   - [feishu-deploy-handler.sh](#feishu-deploy-handlersh)
 - [触发方式](#触发方式)
+  - [SSH 受控部署通道](#ssh-受控部署通道2026-08-29-新增)
 - [部署目标](#部署目标)
 - [CI/CD 工作流](#cicd-工作流)
 - [构建类型](#构建类型)
@@ -48,10 +49,14 @@ DevPilot 的核心理念：**AI 开发 -> 自动部署 -> 飞书通知**。Claud
                     │          feishu-deploy-handler.sh               │
                     │          post-dev-hook.sh                       │
                     │                    │                            │
-                    │                    ▼                            │
-                    │          deploy-service.sh                     │
-                    │     (读取 service.yaml 构建并部署)                │
-                    └────────────────────┬────────────────────────────┘
+                    │   容器内无 docker CLI：                          │
+                    │   SSH 受控通道（forced-command）──┐              │
+                    └────────────────────┬─────────────┼──────────────┘
+                                         │             ▼
+                                         │      宿主机 feishu-deploy-handler.sh
+                                         ▼             │
+                                  deploy-service.sh ◄──┘
+                                  (读取 service.yaml 构建并部署)
                                          │
                     ┌────────────────────┼────────────────────┐
                     ▼                    ▼                    ▼
@@ -359,12 +364,15 @@ DEVPILOT_AUTO_DEPLOY=true
 | `/deploy <service-name> --tag v1.0` | 指定标签部署 |
 | `/deploy --list` | 列出所有可部署服务 |
 | `/deploy --status <service-name>` | 查看服务运行状态 |
+| `/deploy --logs <service-name>` | 查看服务最近 50 行日志 |
+| `/deploy --restart <service-name>` | 重启服务 |
 | `/deploy --cleanup <service-name>` | 清理服务 |
 | `/deploy --help` | 显示帮助 |
 
-**集成方式**：
-
-通过 OpenClaw 的插件机制或 Webhook 回调，将 `/deploy` 命令路由到此脚本。脚本接收消息文本作为参数，输出文本格式结果（可由 OpenClaw 转换为飞书消息卡片）。
+**集成方式**：飞书消息以 `/deploy` 开头时，由 OpenClaw 的 `deploy` 技能
+（`skills/deploy/SKILL.md`，`user-invocable` 斜杠命令）命中并按技能规则把参数
+**原样透传**给本脚本执行，输出**原样回贴**（变更类命令执行前由 Agent 向用户
+复述确认）。技能由 `setup-skills.sh` 安装，装完需 `docker compose restart openclaw`。
 
 ```bash
 # 直接调用
@@ -374,6 +382,17 @@ echo "/deploy my-service" | bash cicd/service-deploy/feishu-deploy-handler.sh
 bash cicd/service-deploy/feishu-deploy-handler.sh "/deploy my-service --tag v1.0"
 ```
 
+**执行位置自动判定（2026-08-29 起）**：脚本启动时自检运行环境，无需调用方选择通道：
+
+| 运行环境 | 行为 |
+|---------|------|
+| 宿主机（有 docker CLI） | 本地直接执行，全部子命令可用 |
+| 容器内 + 已配置 SSH 受控通道（`DEPLOY_SSH_HOST`） | 自动把命令经 SSH 转发宿主机执行（输出带 `[ssh]` 标记），全部子命令返回真实结果 |
+| 容器内 + 未配置 SSH 通道 | 本地执行：查询类命令返回真实结果；构建/部署/清理类被 `deploy-service.sh` 前置检查拦截并提示宿主机手动执行 |
+
+SSH 不可达（exit 255）时自动回退第三行行为，不会中断。通道配置见下方
+[SSH 受控部署通道](#ssh-受控部署通道) 与《用户操作手册》4.7.3 Phase 2。
+
 ---
 
 ## 触发方式
@@ -382,8 +401,8 @@ DevPilot 支持 4 种部署触发方式：
 
 | 触发方式 | 脚本 | 适用场景 |
 |---------|------|---------|
-| **开发完成自动触发** | `post-dev-hook.sh` | Claude Code 开发完服务后自动部署（由 `DEVPILOT_AUTO_DEPLOY` 控制） |
-| **飞书 Bot 命令** | `feishu-deploy-handler.sh` | 通过飞书群聊远程触发部署 |
+| **开发完成自动触发** | `post-dev-hook.sh` | Claude Code 开发完服务后自动部署（由 `DEVPILOT_AUTO_DEPLOY` 控制，宿主机执行） |
+| **飞书 Bot 命令** | `feishu-deploy-handler.sh` | 通过飞书远程触发部署（配置 SSH 受控通道后，容器内命令自动转发宿主机执行） |
 | **Git 推送触发** | CI 工作流 | 代码推送到仓库自动部署 |
 | **手动执行** | `deploy-service.sh` | 本地手动部署单个服务 |
 
@@ -394,13 +413,42 @@ DevPilot 支持 4 种部署触发方式：
    Claude Code 开发 -> post-dev-hook.sh -> deploy-service.sh -> 部署
 
 2. 飞书命令触发:
-   飞书消息 "/deploy xxx" -> feishu-deploy-handler.sh -> deploy-service.sh -> 部署
+   飞书消息 "/deploy xxx" -> OpenClaw deploy 技能 -> feishu-deploy-handler.sh
+       ->（容器内）SSH 受控通道转发宿主机 -> deploy-service.sh -> 部署
 
 3. Git 推送触发:
    git push -> CI 工作流 -> deploy-service.sh -> 部署
 
 4. 手动触发:
    命令行 -> deploy-service.sh -> 部署
+```
+
+### SSH 受控部署通道（2026-08-29 新增）
+
+飞书 `/deploy` 命令的 exec 工具运行在 `devpilot-openclaw` 容器内，该容器
+**无 docker CLI**（容器隔离原则，不挂载 docker.sock）。构建/部署类命令依赖
+宿主机 docker daemon，因此提供 SSH forced-command 受控通道：
+
+```
+OpenClaw 容器（无 docker CLI）
+      │  ssh devpilot-deploy@host.docker.internal "/deploy xxx"
+      ▼
+宿主机 sshd（forced-command 锁定：无论请求什么命令，
+      │   都强制改跑 feishu-deploy-handler.sh "$SSH_ORIGINAL_COMMAND"）
+      ▼
+feishu-deploy-handler.sh（宿主机，有 docker CLI）-> deploy-service.sh -> 部署
+```
+
+**安全性**：密钥被 authorized_keys 的 forced-command 选项锁定为只能执行部署
+处理器，且禁用端口转发 / X11 转发 / agent 转发 / 伪终端——即使私钥泄露也无法
+在宿主机执行任意命令。
+
+**一键配置**（宿主机 root 执行，幂等；详见《用户操作手册》4.7.3 Phase 2）：
+
+```bash
+sudo bash scripts/setup-deploy-ssh.sh   # 创建受限用户+密钥+forced-command+known_hosts+自测
+# .env 设置 DEPLOY_SSH_HOST=host.docker.internal 后：
+docker compose up -d --build openclaw   # 镜像含 openssh-client，需重建
 ```
 
 ---
@@ -642,6 +690,14 @@ devpilot-claude-litellm 容器启动时会**自动配置 agnes-ai 供应商**，
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
 | `DEVPILOT_AUTO_DEPLOY` | 开发完成后自动部署 | `false` |
+| `DEPLOY_SSH_HOST` | SSH 受控部署通道目标主机（空 = 不启用；设 `host.docker.internal` 即宿主机） | 空 |
+| `DEPLOY_SSH_USER` | SSH 受控用户 | `devpilot-deploy` |
+| `DEPLOY_SSH_KEY` | 容器内私钥路径（compose 注入） | `/opt/devpilot/deploy-keys/id_ed25519` |
+| `DEPLOY_SSH_KNOWN_HOSTS` | 容器内 known_hosts 路径（compose 注入） | `/opt/devpilot/deploy-keys/known_hosts` |
+
+> `DEPLOY_SSH_*` 仅注入 `devpilot-openclaw` 容器；密钥文件由
+> `scripts/setup-deploy-ssh.sh` 生成到宿主机 `data/deploy-keys/`（compose
+> 只读挂载）。未配置时构建/部署类命令在容器内被拦截并提示宿主机手动执行。
 
 ### 默认值
 
@@ -699,9 +755,43 @@ fi
 
 ### Q: 飞书 Bot 如何触发部署
 
-1. 确保飞书 Bot 已通过 OpenClaw 接入
-2. 在 OpenClaw 中配置 `/deploy` 命令路由到 `feishu-deploy-handler.sh`
-3. 在飞书群聊中发送消息：`/deploy my-service`
+1. 安装技能并重启：`./setup-skills.sh && docker compose restart openclaw`
+   （`/deploy` 路由技能随 8 个技能一起安装，无需额外配置）
+2. 验证技能已加载：`docker exec devpilot-openclaw openclaw skills list`
+3. 在飞书中发送消息：`/deploy my-service`
+4. 若需构建/部署类命令直接执行（而非提示宿主机手动执行），配置 SSH 受控
+   部署通道（见上方 [SSH 受控部署通道](#ssh-受控部署通道2026-08-29-新增)）
+
+### Q: 容器内执行 /deploy 提示「请在宿主机执行」怎么办
+
+这是未配置 SSH 受控通道时的预期拦截（容器内无 docker CLI，无法构建镜像）。
+两种解决方式：
+
+```bash
+# 方式 1：配置 SSH 受控通道（推荐，飞书 /deploy 直接部署）
+sudo bash scripts/setup-deploy-ssh.sh
+# .env 设置 DEPLOY_SSH_HOST=host.docker.internal 后：
+docker compose up -d --build openclaw
+
+# 方式 2：在宿主机手动执行
+bash cicd/service-deploy/feishu-deploy-handler.sh "/deploy my-service"
+```
+
+### Q: 已配置 SSH 通道但输出带 [ssh][warn] 受控通道不可达
+
+说明容器内 ssh 连接宿主机失败（exit 255），已自动回退本地执行。排查顺序：
+
+```bash
+# 1. 宿主机 sshd 是否运行
+sudo systemctl status ssh
+
+# 2. 密钥与 known_hosts 是否就位（setup-deploy-ssh.sh 生成）
+ls -l data/deploy-keys/          # 应有 id_ed25519(600) + known_hosts(644)
+
+# 3. 重跑一键配置（幂等）并重启容器
+sudo bash scripts/setup-deploy-ssh.sh
+docker compose restart openclaw
+```
 
 ### Q: 如何查看已部署的服务
 

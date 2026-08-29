@@ -57,6 +57,40 @@ if [ -z "${INPUT_TEXT}" ]; then
     read -r INPUT_TEXT
 fi
 
+# ============================================================
+# SSH 受控通道自动转发（Phase 2）
+# ============================================================
+# 条件：DEPLOY_SSH_HOST 已配置 且 本机无 docker CLI（即运行在 OpenClaw 容器内）。
+# 行为：把 /deploy 原始命令整体经 SSH 转发宿主机执行（宿主机才有 docker daemon）。
+#       宿主机侧 authorized_keys 由 forced-command 锁定为只能执行本脚本，
+#       无论请求什么命令都会被改跑 feishu-deploy-handler.sh "$SSH_ORIGINAL_COMMAND"。
+# 回退：SSH 不可达（exit 255 = ssh 自身错误，如连接拒绝/密钥缺失）时继续本地
+#       执行——查询类命令照常返回，构建类命令由 deploy-service.sh 前置检查拦截
+#       并提示宿主机手动执行（与未配置通道时行为一致）。
+# 无死循环：宿主机 handler 有 docker CLI，不会再次转发；DEPLOY_SSH_HOST 也仅
+#       注入 openclaw 容器环境。
+if [ -n "${DEPLOY_SSH_HOST:-}" ] && [ -n "${INPUT_TEXT}" ] && ! command -v docker &>/dev/null; then
+    SSH_USER="${DEPLOY_SSH_USER:-devpilot-deploy}"
+    # CheckHostIP=no：只按主机名匹配 known_hosts（host.docker.internal 条目由
+    # setup-deploy-ssh.sh 固定写入），避免 docker 网络重建导致网关 IP 变化后
+    # host key 校验失败
+    SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10 -o CheckHostIP=no)
+    if [ -n "${DEPLOY_SSH_KEY:-}" ] && [ -f "${DEPLOY_SSH_KEY}" ]; then
+        SSH_OPTS+=(-i "${DEPLOY_SSH_KEY}")
+    fi
+    if [ -n "${DEPLOY_SSH_KNOWN_HOSTS:-}" ] && [ -f "${DEPLOY_SSH_KNOWN_HOSTS}" ]; then
+        SSH_OPTS+=(-o UserKnownHostsFile="${DEPLOY_SSH_KNOWN_HOSTS}")
+    fi
+    echo "[ssh] 本容器无 docker CLI，经受控通道转发宿主机执行: ${SSH_USER}@${DEPLOY_SSH_HOST}"
+    ssh "${SSH_OPTS[@]}" "${SSH_USER}@${DEPLOY_SSH_HOST}" "${INPUT_TEXT}"
+    SSH_RC=$?
+    if [ "${SSH_RC}" -ne 255 ]; then
+        # 宿主机 handler 的业务结果（含错误卡片）原样透传，退出码保持一致
+        exit "${SSH_RC}"
+    fi
+    echo "[ssh][warn] 受控通道不可达（ssh exit 255），回退本地执行；构建/部署类命令将被拦截并提示宿主机手动执行"
+fi
+
 # 去除前缀
 INPUT_TEXT="${INPUT_TEXT#/deploy }"
 INPUT_TEXT="${INPUT_TEXT#/deploy}"

@@ -40,6 +40,45 @@ ACTIVE_PROVIDER="${LLM_PLATFORM}"
 ACTIVE_MODEL="${LLM_MODEL}"
 ACTIVE_DEFAULT_MODEL="${ACTIVE_PROVIDER}/${ACTIVE_MODEL}"
 
+# ---- 2.3 OPENCLAW_MODEL 强模型覆盖（可选）----
+# 技能路由（/deploy 等）与 G1→G5 多步流程的遵循度强依赖模型能力：轻量档
+# （flash/turbo/mini）常无视技能指令自由发挥。.env 设置
+# OPENCLAW_MODEL=<平台>/<模型>（如 glm/GLM-5.2）可固定 agents.defaults.model，
+# 允许跨平台指定（对应平台 API Key + Base URL 需已配置，否则 provider 会被
+# 3.4.1 过滤剔除导致模型引用悬空，此处提前校验并回退）。
+if [ -n "${OPENCLAW_MODEL:-}" ]; then
+    OC_PROVIDER="${OPENCLAW_MODEL%%/*}"
+    if [ "${OC_PROVIDER}" = "${OPENCLAW_MODEL}" ]; then
+        echo "[warn] OPENCLAW_MODEL='${OPENCLAW_MODEL}' 缺少 <平台>/<模型> 格式（应为如 glm/GLM-5.2），已忽略"
+    else
+        case "${OC_PROVIDER}" in
+            agnes)    OC_KEY="${AGNES_API_KEY:-}";    OC_URL="${AGNES_BASE_URL:-}" ;;
+            deepseek) OC_KEY="${DEEPSEEK_API_KEY:-}"; OC_URL="${DEEPSEEK_BASE_URL:-}" ;;
+            glm)      OC_KEY="${GLM_API_KEY:-}";      OC_URL="${GLM_BASE_URL:-}" ;;
+            ark)      OC_KEY="${ARK_API_KEY:-}";      OC_URL="${ARK_BASE_URL:-}" ;;
+            bailian)  OC_KEY="${BAILIAN_API_KEY:-}";  OC_URL="${BAILIAN_BASE_URL:-}" ;;
+            *)        OC_KEY=""; OC_URL="" ;;
+        esac
+        if [ "${OC_PROVIDER}" = "${ACTIVE_PROVIDER}" ] \
+           || { [ -n "${OC_KEY}" ] && [ "${OC_KEY}" != "change-me" ] \
+                && [[ "${OC_KEY}" != your-* ]] && [ -n "${OC_URL}" ]; }; then
+            ACTIVE_DEFAULT_MODEL="${OPENCLAW_MODEL}"
+            echo "[init] OPENCLAW_MODEL 覆盖生效: agents.defaults.model=${ACTIVE_DEFAULT_MODEL}"
+        else
+            echo "[warn] OPENCLAW_MODEL=${OPENCLAW_MODEL} 对应平台未配置 API Key/Base URL（provider 会被启动过滤剔除）"
+            echo "[warn] 已回退平台默认模型: ${ACTIVE_DEFAULT_MODEL}"
+        fi
+    fi
+fi
+
+# ---- 2.4 轻量模型档告警 ----
+# 不阻塞启动，但明确提示技能路由遵循度风险，给出可操作的修复动作。
+if echo "${ACTIVE_DEFAULT_MODEL#*/}" | grep -qiE 'flash|turbo|mini|lite|air|instant|nano'; then
+    echo "[warn] 当前 Agent 模型 ${ACTIVE_DEFAULT_MODEL} 为轻量档（flash/turbo 等），"
+    echo "[warn] 斜杠命令技能路由与 G1→G5 开发链路的遵循度弱，易绕过技能自由发挥；"
+    echo "[warn] 建议在 .env 设置 OPENCLAW_MODEL=<平台>/<模型> 指定更强模型（如 glm/GLM-5.2）。"
+fi
+
 # ---- 2.1 网关 Token 默认化 ----
 # 若未设置或仍为占位符 change-me-to-secure-token，则自动生成安全随机 Token，
 # 避免用户误用占位符导致“使用占位符 token 无法登录 / 不安全”。
@@ -254,6 +293,14 @@ if [ -f "${CONFIG_FILE}" ]; then
     openclaw config set channels.feishu.accounts.main.name "${FEISHU_BOT_NAME}" 2>/dev/null || true
 fi
 
+# ---- 3.6.1 OPENCLAW_MODEL 显式指定时，每次启动同步 agents.defaults.model ----
+# openclaw.json 已存在时 section 3 的模板生成被跳过，模型覆盖不会落盘；
+# 未显式指定 OPENCLAW_MODEL 时不写入，保留用户经 /model 命令或 UI 的会话级切换。
+if [ -n "${OPENCLAW_MODEL:-}" ] && [ "${ACTIVE_DEFAULT_MODEL}" = "${OPENCLAW_MODEL}" ]; then
+    openclaw config set agents.defaults.model "${ACTIVE_DEFAULT_MODEL}" 2>/dev/null \
+        || echo "[warn] agents.defaults.model 写入失败，请检查 openclaw config set 或手动编辑 ${CONFIG_FILE}"
+fi
+
 # ---- 3.7 飞书凭据空值告警 ----
 # 若 .env 未填写真实 FEISHU_APP_ID/FEISHU_APP_SECRET，频道即使配置正确也无法启动。
 if [ -z "${FEISHU_APP_ID}" ] || [ -z "${FEISHU_APP_SECRET}" ] || \
@@ -303,6 +350,21 @@ else
     echo "  - 跳过（node 不可用或配置文件缺失）"
 fi
 
+# ---- 3.9 种子 AGENTS.md（Agent 工作区硬路由规则）----
+# OpenClaw 每次会话开始自动加载工作区 AGENTS.md（默认 ~/.openclaw/workspace，
+# 本部署为 ${OPENCLAW_CONFIG_DIR}/workspace）。缺少该文件时 Agent 只有技能的
+# 一行摘要，无任何「斜杠命令必须命中技能 / 开发需求必须走 G1→G5」硬约束，
+# 会自由发挥（2026-08-29 实测）。此处仅在缺失时种子（镜像内模板随构建固化，
+# 可被宿主机 setup-skills.sh 的较新版本覆盖）。
+AGENTS_MD="${OPENCLAW_CONFIG_DIR}/workspace/AGENTS.md"
+if [ ! -f "${AGENTS_MD}" ] && [ -f /app/conf/AGENTS.md ]; then
+    mkdir -p "${OPENCLAW_CONFIG_DIR}/workspace"
+    cp /app/conf/AGENTS.md "${AGENTS_MD}"
+    echo "[init] 已种子 AGENTS.md → ${AGENTS_MD}"
+elif [ -f "${AGENTS_MD}" ]; then
+    echo "[init] AGENTS.md 已存在（${AGENTS_MD}），跳过种子"
+fi
+
 # ---- 4. 安装/启用飞书插件（WebSocket 长连接模式） ----
 # OpenClaw 新版已内置 bundled Feishu；旧版仍需手动安装。此处做兼容处理：
 # 若 plugins list 中无 feishu 相关条目则尝试安装，失败也不阻塞启动。
@@ -324,6 +386,7 @@ echo "  - 端口: ${OPENCLAW_GATEWAY_PORT:-18789}"
 echo "  - 绑定模式: lan（强制）"
 echo "  - 飞书模式: WebSocket 长连接（默认）"
 echo "  - 模型 Provider: ${ACTIVE_PROVIDER}"
+echo "  - Agent 模型: ${ACTIVE_DEFAULT_MODEL}"
 echo "  - Redis: redis:6379（devpilot-network 服务名，bridge 模式）"
 echo "========================================"
 

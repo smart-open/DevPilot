@@ -113,6 +113,14 @@ else
     echo -e "  保留现有数据"
 fi
 
+# ---- 6.1 重装 OpenClaw 技能 + AGENTS.md（幂等，必须先于容器启动）----
+# 清空 data/ 会连带抹掉 data/openclaw/.openclaw/skills 与 workspace/AGENTS.md：
+# 不重装则 OpenClaw「无技能可用」，飞书里 /deploy 等斜杠命令全部退化为普通对话
+# 由模型自由发挥（2026-08-29 实测缺陷）。保留数据时同样执行：幂等覆盖，
+# 保证技能与 AGENTS.md 与仓库 skills/、conf/openclaw/ 保持同步（配合步骤 3 的 git pull）。
+echo -e "${GREEN}▶ 重装 OpenClaw 技能 + AGENTS.md（幂等覆盖）...${NC}"
+bash ./setup-skills.sh
+
 # ---- 7. 无缓存重建 ----
 echo -e "${GREEN}[7/8]${NC} 无缓存重建镜像（devpilot-claude-litellm / openclaw）..."
 docker compose build --no-cache claude-litellm openclaw 2>&1 | tail -15
@@ -147,6 +155,16 @@ docker compose exec -T claude-litellm sh -c 'cat /home/node/.claude/settings.jso
 echo ""
 echo -e "${GREEN}▶ Claude Code 版本：${NC}"
 docker compose exec -T claude-litellm claude --version 2>/dev/null | sed 's/^/  /' || echo "  (无法读取)"
+
+echo ""
+echo -e "${GREEN}▶ OpenClaw 技能 + AGENTS.md：${NC}"
+SKILL_COUNT=$(ls -1 data/openclaw/.openclaw/skills 2>/dev/null | wc -l | tr -d ' ')
+echo "  已安装技能数: ${SKILL_COUNT:-0}（期望与仓库 skills/ 目录数一致）"
+if [ -f data/openclaw/.openclaw/workspace/AGENTS.md ]; then
+    echo "  AGENTS.md 硬路由规则: 已就位"
+else
+    echo "  AGENTS.md 硬路由规则: 缺失（运行 ./setup-skills.sh 补装）"
+fi
 
 echo ""
 echo -e "${CYAN}========================================${NC}"

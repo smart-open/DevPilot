@@ -115,7 +115,7 @@ make down        # 停止服务
 make logs        # 查看日志
 make health      # 健康检查
 make claude      # 启动 Claude Code
-make setup-skills # 安装技能文件到 data/openclaw/.openclaw/skills/
+make setup-skills # 安装技能 + Agent 硬路由规则 AGENTS.md（装完需重启 openclaw）
 make help        # 查看所有命令
 ```
 
@@ -127,7 +127,7 @@ Claude Code 在 `workspace/` 下开发的服务可自动构建并部署到 Docke
 DEVPILOT_AUTO_DEPLOY=true
 ```
 
-开启后，开发完成钩子（`post-dev-hook.sh`）会自动检测 `workspace/` 下有变更的服务并部署。也可通过飞书 `/deploy` 命令或手动执行 `deploy-service.sh` 触发。详见 [服务自动部署文档](cicd/service-deploy/README.md)。
+开启后，开发完成钩子（`post-dev-hook.sh`）会自动检测 `workspace/` 下有变更的服务并部署（构建动作在宿主机执行）。也可通过飞书 `/deploy` 命令（配置 SSH 受控通道 `DEPLOY_SSH_HOST` 后可直接在容器内触发宿主机构建部署：`sudo bash scripts/setup-deploy-ssh.sh`）或手动执行 `deploy-service.sh` 触发。详见 [服务自动部署文档](cicd/service-deploy/README.md)。
 
 ## AI 研发流程技能
 

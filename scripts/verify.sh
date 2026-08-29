@@ -7,6 +7,7 @@
 #   - litellm 代理层（健康 + 模型注册 + Anthropic 协议探测）
 #   - Claude Code 端到端（settings.json 指向 litellm + 实际对话）
 #   - OpenClaw 飞书（gateway + 插件 + 频道）
+#   - OpenClaw 技能（仓库 skills/ ↔ data 安装 ↔ 运行时加载 + AGENTS.md 路由规则）
 #   - Redis（ping）
 #
 # 用法：bash scripts/verify.sh
@@ -46,7 +47,7 @@ cd "$PROJECT_ROOT" || { echo "无法切到 $PROJECT_ROOT"; exit 1; }
 # ============= 阶段 0: 镜像存在性 =============
 # 双重前缀（devpilot-devpilot-*）检查已移除：docker-compose.yml 所有 build 服务
 # 均已显式设置 image: 字段（commit 812c51a），根因已根治，无需运行时兜底检查。
-echo -e "${CYAN}[1/7] 镜像存在性检查${NC}"
+echo -e "${CYAN}[1/8] 镜像存在性检查${NC}"
 for img in devpilot-openclaw devpilot-claude-litellm; do
     if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${img}:latest$"; then
         check_pass "镜像 ${img}:latest 存在"
@@ -57,7 +58,7 @@ done
 echo ""
 
 # ============= 阶段 1: 容器层 =============
-echo -e "${CYAN}[2/7] 容器状态${NC}"
+echo -e "${CYAN}[2/8] 容器状态${NC}"
 EXPECTED=("devpilot-redis" "devpilot-openclaw" "devpilot-claude-litellm")
 for name in "${EXPECTED[@]}"; do
     STATUS=$(docker inspect --format '{{.State.Status}}' "$name" 2>/dev/null)
@@ -70,7 +71,7 @@ done
 echo ""
 
 # ============= 阶段 2: litellm 健康 + 模型注册 =============
-echo -e "${CYAN}[3/7] devpilot-claude-litellm 代理层${NC}"
+echo -e "${CYAN}[3/8] devpilot-claude-litellm 代理层${NC}"
 HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4000/health/liveliness 2>/dev/null)
 if [ "$HEALTH" = "200" ]; then
     check_pass "litellm /health/liveliness -> 200"
@@ -118,7 +119,7 @@ fi
 echo ""
 
 # ============= 阶段 3: Claude Code settings.json =============
-echo -e "${CYAN}[4/7] Claude Code 链路${NC}"
+echo -e "${CYAN}[4/8] Claude Code 链路${NC}"
 SETTINGS=$(docker compose exec -T claude-litellm cat /home/node/.claude/settings.json 2>/dev/null)
 if echo "$SETTINGS" | grep -q '"ANTHROPIC_BASE_URL": "http://127.0.0.1:4000"'; then
     check_pass "ANTHROPIC_BASE_URL 指向 devpilot-claude-litellm:4000"
@@ -147,7 +148,7 @@ fi
 echo ""
 
 # ============= 阶段 4: OpenClaw + 飞书 =============
-echo -e "${CYAN}[5/7] OpenClaw + 飞书${NC}"
+echo -e "${CYAN}[5/8] OpenClaw + 飞书${NC}"
 # OpenClaw gateway 真实探活：容器内直打 /healthz。
 # 原 `openclaw gateway status` 在 2026.7.x 是 systemd 风格的状态输出（OpenClaw
 # 在容器内是前台进程，无 systemd 集成），永远走 else 分支误报 FAIL。
@@ -185,8 +186,77 @@ else
 fi
 echo ""
 
-# ============= 阶段 5: Redis =============
-echo -e "${CYAN}[6/7] Redis${NC}"
+# ============= 阶段 5: OpenClaw 技能 + AGENTS.md =============
+# 背景：rebuild.sh 清空 data/ 会抹掉技能与 AGENTS.md；此前 verify.sh 无任何技能
+# 检查项，丢失不可见——飞书里 /deploy 退化为模型自由发挥（2026-08-29 实测）。
+# 三层检查：仓库 skills/ ↔ data 安装（文件系统）↔ openclaw 运行时加载 + AGENTS.md。
+echo -e "${CYAN}[6/8] OpenClaw 技能 + AGENTS.md${NC}"
+SKILL_SRC_COUNT=0
+SKILL_INSTALLED_OK=0
+SKILL_MISSING=""
+if [ -d skills ] && [ -d data/openclaw/.openclaw/skills ]; then
+    for d in skills/*/; do
+        [ -f "${d}SKILL.md" ] || continue
+        SKILL_SRC_COUNT=$((SKILL_SRC_COUNT + 1))
+        name="$(basename "${d}")"
+        if [ -f "data/openclaw/.openclaw/skills/${name}/SKILL.md" ]; then
+            SKILL_INSTALLED_OK=$((SKILL_INSTALLED_OK + 1))
+        else
+            SKILL_MISSING="${SKILL_MISSING} ${name}"
+        fi
+    done
+fi
+if [ "${SKILL_SRC_COUNT}" -gt 0 ] && [ -z "${SKILL_MISSING}" ]; then
+    check_pass "技能已安装 ${SKILL_INSTALLED_OK}/${SKILL_SRC_COUNT}（data/openclaw/.openclaw/skills）"
+elif [ "${SKILL_SRC_COUNT}" -gt 0 ]; then
+    check_fail "技能缺失:${SKILL_MISSING}（执行 ./setup-skills.sh && docker compose restart openclaw）"
+else
+    check_warn "仓库 skills/ 下未发现 SKILL.md（目录结构异常）"
+fi
+
+# 运行时加载：openclaw skills list 应包含全部仓库技能名
+SKILL_LIST=$(docker exec devpilot-openclaw openclaw skills list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')
+if [ -n "${SKILL_LIST}" ]; then
+    SKILL_RUNTIME_MISS=""
+    for d in skills/*/; do
+        [ -f "${d}SKILL.md" ] || continue
+        name="$(basename "${d}")"
+        echo "${SKILL_LIST}" | grep -Eq "(^|[[:space:]])${name}([[:space:]]|$)" || SKILL_RUNTIME_MISS="${SKILL_RUNTIME_MISS} ${name}"
+    done
+    if [ -z "${SKILL_RUNTIME_MISS}" ]; then
+        check_pass "openclaw 运行时已加载全部 ${SKILL_SRC_COUNT} 个技能"
+    else
+        check_fail "openclaw 运行时未加载:${SKILL_RUNTIME_MISS}（docker compose restart openclaw 后重试）"
+    fi
+else
+    check_warn "无法读取 openclaw skills list（容器未启动或 CLI 输出为空）"
+fi
+
+# AGENTS.md 硬路由规则（缺失时 Agent 无「斜杠命令必须命中技能 / 开发需求走 G 链」约束）
+if [ -f data/openclaw/.openclaw/workspace/AGENTS.md ]; then
+    check_pass "AGENTS.md 硬路由规则已就位（workspace）"
+else
+    check_fail "AGENTS.md 缺失（./setup-skills.sh 安装；全新 data/ 由容器 init 种子兜底）"
+fi
+
+# SSH 受控部署通道（可选能力：未配置仅提示，不判 FAIL）
+if docker exec devpilot-openclaw printenv DEPLOY_SSH_HOST 2>/dev/null | grep -q .; then
+    if docker exec devpilot-openclaw test -f /opt/devpilot/deploy-keys/id_ed25519 2>/dev/null; then
+        if docker exec devpilot-openclaw bash /opt/devpilot/cicd/service-deploy/feishu-deploy-handler.sh "/deploy --help" 2>/dev/null | grep -q "部署命令帮助"; then
+            check_pass "SSH 受控部署通道可用（/deploy --help 经通道返回真实结果）"
+        else
+            check_fail "SSH 通道已配置但探测失败（重跑 sudo bash scripts/setup-deploy-ssh.sh 并重启 openclaw）"
+        fi
+    else
+        check_fail "DEPLOY_SSH_HOST 已配置但密钥缺失（data/deploy-keys/id_ed25519 不存在；运行 sudo bash scripts/setup-deploy-ssh.sh）"
+    fi
+else
+    check_warn "SSH 受控部署通道未启用（可选；启用后 /deploy 可直接构建部署：sudo bash scripts/setup-deploy-ssh.sh）"
+fi
+echo ""
+
+# ============= 阶段 6: Redis =============
+echo -e "${CYAN}[7/8] Redis${NC}"
 REDIS_PASS=$(grep '^REDIS_PASSWORD=' .env 2>/dev/null | cut -d= -f2)
 PONG=$(docker exec devpilot-redis sh -c "redis-cli -a \"${REDIS_PASS}\" ping" 2>&1 | tail -1)
 if [ "$PONG" = "PONG" ]; then
@@ -196,8 +266,8 @@ else
 fi
 echo ""
 
-# ============= 阶段 6: OpenClaw 模型注册 =============
-echo -e "${CYAN}[7/7] OpenClaw 模型注册${NC}"
+# ============= 阶段 7: OpenClaw 模型注册 =============
+echo -e "${CYAN}[8/8] OpenClaw 模型注册${NC}"
 MODELS_IN_OPENCLAW=$(docker exec devpilot-openclaw cat /data/openclaw/.openclaw/openclaw.json 2>/dev/null | grep -oE '"id": *"[^"]+"' | wc -l)
 if [ "$MODELS_IN_OPENCLAW" -ge 1 ]; then
     check_pass "OpenClaw 配置含 $MODELS_IN_OPENCLAW 个 model id（已注册模型）"
@@ -222,6 +292,7 @@ else
     echo "  1. 容器日志：docker compose logs -f <service>"
     echo "  2. litellm 配置：docker exec devpilot-claude-litellm cat /opt/litellm/litellm_config.yaml"
     echo "  3. Claude Code 配置：docker compose exec claude-litellm cat /home/node/.claude/settings.json"
-    echo "  4. 详细排障手册：运维操作手册.md §13"
+    echo "  4. 技能重装：./setup-skills.sh && docker compose restart openclaw"
+    echo "  5. 详细排障手册：运维操作手册.md §13"
     exit 1
 fi

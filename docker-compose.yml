@@ -106,6 +106,10 @@ services:
       # OpenClaw 核心配置
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
       - OPENCLAW_GATEWAY_PORT=${OPENCLAW_GATEWAY_PORT}
+      # Agent 默认模型覆盖（可选，格式 <平台>/<模型>，如 glm/GLM-5.2）：
+      # 技能路由（/deploy 等斜杠命令）与 G1→G5 流程遵循度强依赖模型能力，
+      # 轻量档（flash/turbo）易无视技能自由发挥；详见 .env.example 说明
+      - OPENCLAW_MODEL=${OPENCLAW_MODEL:-}
       - FEISHU_APP_ID=${FEISHU_APP_ID}
       - FEISHU_APP_SECRET=${FEISHU_APP_SECRET}
       - FEISHU_BOT_NAME=${FEISHU_BOT_NAME:-DevPilot助手}
@@ -120,6 +124,14 @@ services:
       # WebSocket 来源白名单。留空则自动探测容器内 IP（localhost/SSH 隧道场景可用，
       # 局域网浏览器访问建议显式填写宿主机 LAN IP，如 192.168.1.100）。
       - DEVPILOT_HOST_IP=${DEVPILOT_HOST_IP:-}
+      # SSH 受控部署通道（可选，Phase 2）：/deploy 构建类命令经此转发宿主机执行。
+      # 默认 host.docker.internal（下方 extra_hosts 映射到 host-gateway，即宿主机），
+      # 也可显式填宿主机 LAN IP。密钥经 data/deploy-keys 只读挂载，宿主机侧由
+      # scripts/setup-deploy-ssh.sh 一键配置（forced-command 锁定只能跑部署处理器）。
+      - DEPLOY_SSH_HOST=${DEPLOY_SSH_HOST:-}
+      - DEPLOY_SSH_USER=${DEPLOY_SSH_USER:-devpilot-deploy}
+      - DEPLOY_SSH_KEY=/opt/devpilot/deploy-keys/id_ed25519
+      - DEPLOY_SSH_KNOWN_HOSTS=/opt/devpilot/deploy-keys/known_hosts
       # V8 堆上限显式设为 512MB。Node 在 768M 容器内的默认堆上限约 256MB，
       # gateway 处理长 SSE 流式回复时堆增长会撞限崩溃（"JavaScript heap out
       # of memory"，2026-08-26 实测，见运维手册 §13.7）；与下方容器 1024M 限制配套
@@ -129,12 +141,17 @@ services:
     volumes:
       - ./data/openclaw:/data/openclaw
       - ./logs/openclaw:/logs
-      # /deploy 命令执行依赖（skills/deploy/SKILL.md 通道 A）：部署处理器脚本 +
+      # /deploy 命令执行依赖（skills/deploy/SKILL.md 唯一入口）：部署处理器脚本 +
       # workspace 下的 service.yaml。只读挂载——本容器无 docker CLI，构建/部署类
       # 动作会被脚本前置检查拦截并提示宿主机执行（见用户操作手册 4.7）。
       # cicd 路径与 devpilot-claude-litellm 容器保持一致（/opt/devpilot/cicd）。
       - ./cicd:/opt/devpilot/cicd:ro
       - ./workspace:/workspace:ro
+      # SSH 受控部署通道私钥（可选挂载）：scripts/setup-deploy-ssh.sh 生成。
+      # 目录级挂载而非单文件——单文件挂载在密钥缺失时会被 Docker 自动创建为
+      # 目录导致容器启动异常；目录挂载缺失时仅是空目录，SSH 探测失败后
+      # handler 自动回退本地执行（拦截提示），行为与未配置一致。
+      - ./data/deploy-keys:/opt/devpilot/deploy-keys:ro
     # 【P0-7】OpenClaw 由 host 网络改为 bridge 网络（devpilot-network），恢复容器隔离：
     #   - Redis 不再发布到宿主机，OpenClaw 经服务名 redis:6379 访问（见 init-openclaw.sh）
     #   - LiteLLM 经服务名 devpilot-claude-litellm:4000 访问（下方 LITELLM_PROXY_URL）
@@ -146,6 +163,10 @@ services:
     #   DEVPILOT_HOST_IP 显式指定宿主机可达 IP（见下方 env 与 init-openclaw.sh）。
     networks:
       - devpilot-network
+    # DEPLOY_SSH_HOST 默认 host.docker.internal：经 host-gateway 映射到宿主机
+    # （Docker 20.10+），免查 devpilot-network 网关 IP；.env 也可显式覆盖为 LAN IP。
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       # 暴露到宿主机所有接口，供局域网浏览器经 http://<宿主机IP>:18789 访问。
       # 若仅本机访问，可改为 "127.0.0.1:18789:18789"。生产请配合防火墙 / 反代限制。

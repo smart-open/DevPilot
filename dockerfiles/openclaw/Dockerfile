@@ -22,9 +22,12 @@ LABEL org.opencontainers.image.title="devpilot-openclaw" \
       maintainer="devpilot"
 
 # ---- 系统依赖（安装与清理合并为单层，减少镜像层数） ----
+# openssh-client：/deploy 构建类命令经 SSH 受控通道转发宿主机执行
+# （DEPLOY_SSH_HOST，见 cicd/service-deploy/feishu-deploy-handler.sh 顶部转发逻辑）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
+    openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # ---- 设置时区 ----
@@ -43,11 +46,13 @@ WORKDIR /app
 # ---- 复制配置文件 ----
 COPY conf/openclaw/openclaw.default.json /app/conf/openclaw.default.json
 COPY conf/openclaw/init-openclaw.sh /app/conf/init-openclaw.sh
+# Agent 工作区 AGENTS.md 种子模板（硬路由规则）：setup-skills.sh 未执行时的兜底来源
+COPY conf/openclaw/AGENTS.md /app/conf/AGENTS.md
 # 公共函数库（含 configure_platform 等）：镜像内 init-openclaw.sh 直接 source，
 # 不重新在镜像里塞一份完整 cicd/ 树。
 COPY cicd/lib/common.sh /usr/local/lib/devpilot-common.sh
 # 修复 Windows 换行符问题
-RUN sed -i 's/\r$//' /app/conf/init-openclaw.sh /usr/local/lib/devpilot-common.sh \
+RUN sed -i 's/\r$//' /app/conf/init-openclaw.sh /app/conf/AGENTS.md /usr/local/lib/devpilot-common.sh \
     && chmod +x /app/conf/init-openclaw.sh /usr/local/lib/devpilot-common.sh
 
 # ---- 环境变量 ----
