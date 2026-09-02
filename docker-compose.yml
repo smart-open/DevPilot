@@ -33,11 +33,14 @@ services:
       - TZ=${TZ}
     networks:
       - devpilot-network
-    # 【P0-7 bridge 模式】OpenClaw 已改为 bridge 网络，经服务名 redis:6379 访问，
-    # 不再需要把 6379 发布到宿主机。Redis 仅存在于 devpilot-network 内部，
-    # 不对外暴露（相比原 host 模式更安全）。如需从宿主机临时调试，可加：
-    #   ports: ["127.0.0.1:6379:6379"]
-    # 但生产环境请勿长期开放。
+    # 【对外发布】将 Redis 6379 发布到宿主机（宿主机端口由 REDIS_PORT 控制，默认 6379），
+    # 供宿主机 / 局域网客户端直连（如 redis-cli / RDM 等工具）。
+    # OpenClaw 等内部容器仍经服务名 redis:6379 访问，不走宿主机端口。
+    # 安全依赖：redis.conf 的 protected-mode + --requirepass 强密码（init.sh 自动生成）。
+    # 仅本机调试可改为 "127.0.0.1:${REDIS_PORT:-6379}:6379"；
+    # 生产环境建议防火墙限制来源 IP，并保持 REDIS_PASSWORD 为强密码。
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
     logging: *default-logging
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]

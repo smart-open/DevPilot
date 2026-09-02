@@ -36,7 +36,7 @@ DevPilot CI/CD 体系围绕 3 个 Docker 容器构建：
 
 | 容器 | 镜像基础 | 版本 | 端口 |
 |------|---------|------|------|
-| Redis | `redis:8.8.1-alpine` | 8.8.1 | 6379（仅内部） |
+| Redis | `redis:8.8.1-alpine` | 8.8.1 | 6379（对外发布，`REDIS_PORT` 可改） |
 | OpenClaw | `node:22.23.1-bookworm` | `openclaw@2026.7.1-2` | 18789 |
 | Claude Code | `node:22.23.1-bookworm` | `claude-code@2.1.241` | - |
 

@@ -73,7 +73,7 @@ vi .env  # 修改 LLM_PLATFORM=deepseek，配置 DEEPSEEK_API_KEY
 
 | 容器 | 镜像 | 端口 | 职责 |
 |------|------|------|------|
-| Redis | `redis:8.8.1-alpine3.23` | 6379（内部） | 缓存 + AOF/RDB 持久化 |
+| Redis | `redis:8.8.1-alpine3.23` | 6379（对外发布，`REDIS_PORT` 可改） | 缓存 + AOF/RDB 持久化 |
 | OpenClaw | `node:24.17.0` + `openclaw@2026.7.1-2` | 18789 | 飞书 AI 机器人（WebSocket 长连接）+ 多平台大模型对接 |
 | devpilot-claude-litellm | `node:24.17.0` + `claude-code@2.1.241` + (venv)`litellm==1.82.6` | 127.0.0.1:4000（仅回环） | Claude Code 编程助手 + 内置 LiteLLM 代理（Anthropic↔OpenAI 协议翻译，复刻 CC-Switch 本地路由） |
 

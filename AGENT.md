@@ -43,7 +43,7 @@
 
 ### 关键事实（已实现，不要改坏）
 - **3 容器**：redis + openclaw + devpilot-claude-litellm（devpilot-claude 与 litellm 已合并）。
-- **bridge 网络 + 服务名**：Redis 不发布到宿主，OpenClaw 经 `redis:6379`；OpenClaw 经 `devpilot-claude-litellm:4000` 跨容器访问 litellm。`devpilot-network` 在 compose 中显式 `name: devpilot-network`，确保外部 compose 调用同名。
+- **bridge 网络 + 服务名**：Redis 对外发布 `${REDIS_PORT:-6379}:6379`（宿主机可直连，密码鉴权），OpenClaw 仍经 `redis:6379`；OpenClaw 经 `devpilot-claude-litellm:4000` 跨容器访问 litellm。`devpilot-network` 在 compose 中显式 `name: devpilot-network`，确保外部 compose 调用同名。
 - **DEVPILOT_HOST_IP**：bridge 模式下 OpenClaw 容器内是 172.x 内网 IP，对浏览器无意义；如要局域网 `http://<LAN_IP>:18789` 访问 Control UI，必须在 `.env` 显式填写宿主机 LAN IP（脚本会写入 `gateway.controlUi.allowedOrigins`）。
 - **litellm 双进程**：合并容器内由 `conf/claude/start.sh` 后台拉起 litellm（venv）+ 前台保活 Claude Code；不再有独立 litellm 容器。
 
